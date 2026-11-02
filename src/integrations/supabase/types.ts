@@ -14,7 +14,201 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      listings: {
+        Row: {
+          address: string | null
+          category: string
+          collector_id: string | null
+          created_at: string
+          description: string | null
+          expected_price: number | null
+          final_price: number | null
+          id: string
+          lat: number | null
+          lng: number | null
+          photo_path: string | null
+          seller_id: string
+          status: string
+          title: string
+          weight_kg: number
+        }
+        Insert: {
+          address?: string | null
+          category?: string
+          collector_id?: string | null
+          created_at?: string
+          description?: string | null
+          expected_price?: number | null
+          final_price?: number | null
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          photo_path?: string | null
+          seller_id: string
+          status?: string
+          title: string
+          weight_kg?: number
+        }
+        Update: {
+          address?: string | null
+          category?: string
+          collector_id?: string | null
+          created_at?: string
+          description?: string | null
+          expected_price?: number | null
+          final_price?: number | null
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          photo_path?: string | null
+          seller_id?: string
+          status?: string
+          title?: string
+          weight_kg?: number
+        }
+        Relationships: []
+      }
+      messages: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          listing_id: string
+          recipient_id: string
+          sender_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          listing_id: string
+          recipient_id: string
+          sender_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          listing_id?: string
+          recipient_id?: string
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      offers: {
+        Row: {
+          amount: number
+          collector_id: string
+          created_at: string
+          id: string
+          listing_id: string
+          message: string | null
+          status: string
+        }
+        Insert: {
+          amount: number
+          collector_id: string
+          created_at?: string
+          id?: string
+          listing_id: string
+          message?: string | null
+          status?: string
+        }
+        Update: {
+          amount?: number
+          collector_id?: string
+          created_at?: string
+          id?: string
+          listing_id?: string
+          message?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "offers_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          account_type: string
+          avatar_url: string | null
+          city: string | null
+          created_at: string
+          full_name: string
+          id: string
+          phone: string | null
+        }
+        Insert: {
+          account_type?: string
+          avatar_url?: string | null
+          city?: string | null
+          created_at?: string
+          full_name?: string
+          id: string
+          phone?: string | null
+        }
+        Update: {
+          account_type?: string
+          avatar_url?: string | null
+          city?: string | null
+          created_at?: string
+          full_name?: string
+          id?: string
+          phone?: string | null
+        }
+        Relationships: []
+      }
+      reviews: {
+        Row: {
+          comment: string | null
+          created_at: string
+          id: string
+          listing_id: string
+          rating: number
+          reviewee_id: string
+          reviewer_id: string
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          id?: string
+          listing_id: string
+          rating: number
+          reviewee_id: string
+          reviewer_id: string
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          id?: string
+          listing_id?: string
+          rating?: number
+          reviewee_id?: string
+          reviewer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reviews_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
