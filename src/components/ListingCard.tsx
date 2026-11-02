@@ -3,7 +3,7 @@ import { MapPin, Scale } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { categoryOf, formatINR, statusLabel, usePhotoUrl } from "@/lib/scrap";
 
-export function ListingCard({ listing, distance }: { listing: Tables<"listings">; distance?: number }) {
+export function ListingCard({ listing, distance }: { listing: Tables<"listings">; distance?: number | undefined }) {
   const { data: url } = usePhotoUrl(listing.photo_path);
   const cat = categoryOf(listing.category);
   return (

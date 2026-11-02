@@ -10,11 +10,11 @@ import { Logo } from "@/components/AppShell";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
-type Search = { type?: "seller" | "collector" };
+type Search = { type?: "seller" | "collector" | undefined };
 
 export const Route = createFileRoute("/auth")({
   validateSearch: (s: Record<string, unknown>): Search => ({
-    type: s.type === "collector" ? "collector" : s.type === "seller" ? "seller" : undefined,
+    type: s["type"] === "collector" ? "collector" : s["type"] === "seller" ? "seller" : undefined,
   }),
   head: () => ({
     meta: [
