@@ -65,7 +65,7 @@ function SellPage() {
       description: desc || null, address: address || null, lat: loc?.lat ?? null, lng: loc?.lng ?? null, photo_path,
     }).select("id").single();
     setBusy(false);
-    if (error) return toast.error(error.message);
+    if (error) { toast.error(error.message); return; }
     toast.success("Posted! Collectors can now make offers.");
     navigate({ to: "/listings/$id", params: { id: data.id } });
   };
