@@ -8,12 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-type Search = { listing?: string; with?: string };
+type Search = { listing?: string | undefined; with?: string | undefined };
 
 export const Route = createFileRoute("/_authenticated/chats")({
   validateSearch: (s: Record<string, unknown>): Search => ({
-    listing: typeof s.listing === "string" ? s.listing : undefined,
-    with: typeof s.with === "string" ? s.with : undefined,
+    listing: typeof s["listing"] === "string" ? s["listing"] : undefined,
+    with: typeof s["with"] === "string" ? s["with"] : undefined,
   }),
   head: () => ({ meta: [{ title: "Chats — scrappe" }, { name: "description", content: "Chat with sellers and collectors about scrap pickups." }, { property: "og:title", content: "Chats — scrappe" }, { property: "og:description", content: "Chat with sellers and collectors about scrap pickups." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
   component: ChatsPage,

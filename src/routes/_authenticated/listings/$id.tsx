@@ -72,11 +72,11 @@ function ListingPage() {
   const stepIdx = PICKUP_STEPS.findIndex((s) => s.id === l.status);
   const refresh = () => { refetch(); refetchOffers(); qc.invalidateQueries({ queryKey: ["listings"] }); };
 
-  const run = async (fn: () => Promise<{ error: unknown } | void>, msg: string) => {
+  const run = async (fn: () => Promise<{ error: unknown } | void>, msg: string): Promise<void> => {
     setBusy(true);
     const res = await fn();
     setBusy(false);
-    if (res && res.error) return toast.error("Something went wrong");
+    if (res && res.error) { toast.error("Something went wrong"); return; }
     toast.success(msg);
     refresh();
   };
@@ -84,7 +84,7 @@ function ListingPage() {
   const makeOffer = () =>
     run(async () => {
       const n = Number(amount);
-      if (!n || n <= 0) { toast.error("Enter a price"); return { error: true }; }
+      if (!n || n <= 0) { toast.error("Enter a price"); return { error: true as unknown }; }
       return supabase.from("offers").insert({ listing_id: id, collector_id: user!.id, amount: n, message: note || null });
     }, "Offer sent");
 

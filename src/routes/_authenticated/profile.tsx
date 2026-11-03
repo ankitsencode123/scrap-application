@@ -34,7 +34,7 @@ function ProfilePage() {
 
   const save = async () => {
     const { error } = await supabase.from("profiles").update({ full_name: name, phone: phone || null, city: city || null }).eq("id", user!.id);
-    if (error) return toast.error("Couldn't save");
+    if (error) { toast.error("Couldn't save"); return; }
     toast.success("Saved");
     refreshProfile();
   };
