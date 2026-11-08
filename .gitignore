@@ -42,10 +42,10 @@ __pycache__/
 .ruff_cache/
 
 # Local reference imports
-scrap-route-live/
-scrapcycle-exchange-main/
-cursor_pagination.py
-shard_router.py
-backend/code_good_contents_v2.txt
+/scrap-route-live/
+/scrapcycle-exchange-main/
+/cursor_pagination.py
+/shard_router.py
+/backend/code_good_contents_v2.txt
 
 

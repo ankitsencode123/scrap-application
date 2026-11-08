@@ -109,13 +109,23 @@ def get_media_file(key: str):
     )
 
 
-@app.get("/health", tags=["Meta"])
+@app.api_route("/health", methods=["GET", "HEAD"], tags=["Meta"])
 def health():
     return {
         "status": "ok",
         "shards": len(get_router().shard_ids),
         "redis_configured": bool(settings.MAP_REDIS_URL or settings.REDIS_URL),
     }
+
+
+@app.api_route("/", methods=["GET", "HEAD"], tags=["Meta"])
+def root_health():
+    return {
+        "status": "ok",
+        "service": "ScrapMart API",
+        "version": "1.0.0",
+    }
+
 
 
 @app.get("/redis/status", tags=["Meta"])
