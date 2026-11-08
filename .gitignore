@@ -14,6 +14,7 @@ dist-ssr
 .vinxi
 .tanstack/**
 .nitro
+.vercel
 *.local
 
 # Wrangler / Cloudflare
@@ -30,3 +31,21 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Backend (FastAPI)
+backend/.venv/
+backend/uploads/
+backend/.env
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Local reference imports
+scrap-route-live/
+scrapcycle-exchange-main/
+cursor_pagination.py
+shard_router.py
+backend/code_good_contents_v2.txt
+
+

@@ -13,10 +13,12 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedChatsRouteImport } from './routes/_authenticated/chats'
+import { Route as AuthenticatedCollectorRouteImport } from './routes/_authenticated/collector'
 import { Route as AuthenticatedHomeRouteImport } from './routes/_authenticated/home'
 import { Route as AuthenticatedMapRouteImport } from './routes/_authenticated/map'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedSellRouteImport } from './routes/_authenticated/sell'
+import { Route as AuthenticatedSellerRouteImport } from './routes/_authenticated/seller'
 import { Route as AuthenticatedListingsIdRouteImport } from './routes/_authenticated/listings/$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -36,6 +38,11 @@ const AuthRoute = AuthRouteImport.update({
 const AuthenticatedChatsRoute = AuthenticatedChatsRouteImport.update({
   id: '/chats',
   path: '/chats',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedCollectorRoute = AuthenticatedCollectorRouteImport.update({
+  id: '/collector',
+  path: '/collector',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedHomeRoute = AuthenticatedHomeRouteImport.update({
@@ -58,6 +65,11 @@ const AuthenticatedSellRoute = AuthenticatedSellRouteImport.update({
   path: '/sell',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedSellerRoute = AuthenticatedSellerRouteImport.update({
+  id: '/seller',
+  path: '/seller',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedListingsIdRoute = AuthenticatedListingsIdRouteImport.update({
   id: '/listings/$id',
   path: '/listings/$id',
@@ -68,20 +80,24 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/chats': typeof AuthenticatedChatsRoute
+  '/collector': typeof AuthenticatedCollectorRoute
   '/home': typeof AuthenticatedHomeRoute
   '/map': typeof AuthenticatedMapRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/sell': typeof AuthenticatedSellRoute
+  '/seller': typeof AuthenticatedSellerRoute
   '/listings/$id': typeof AuthenticatedListingsIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/chats': typeof AuthenticatedChatsRoute
+  '/collector': typeof AuthenticatedCollectorRoute
   '/home': typeof AuthenticatedHomeRoute
   '/map': typeof AuthenticatedMapRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/sell': typeof AuthenticatedSellRoute
+  '/seller': typeof AuthenticatedSellerRoute
   '/listings/$id': typeof AuthenticatedListingsIdRoute
 }
 export interface FileRoutesById {
@@ -90,10 +106,12 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/chats': typeof AuthenticatedChatsRoute
+  '/_authenticated/collector': typeof AuthenticatedCollectorRoute
   '/_authenticated/home': typeof AuthenticatedHomeRoute
   '/_authenticated/map': typeof AuthenticatedMapRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/sell': typeof AuthenticatedSellRoute
+  '/_authenticated/seller': typeof AuthenticatedSellerRoute
   '/_authenticated/listings/$id': typeof AuthenticatedListingsIdRoute
 }
 export interface FileRouteTypes {
@@ -102,20 +120,24 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/chats'
+    | '/collector'
     | '/home'
     | '/map'
     | '/profile'
     | '/sell'
+    | '/seller'
     | '/listings/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
     | '/chats'
+    | '/collector'
     | '/home'
     | '/map'
     | '/profile'
     | '/sell'
+    | '/seller'
     | '/listings/$id'
   id:
     | '__root__'
@@ -123,10 +145,12 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/chats'
+    | '/_authenticated/collector'
     | '/_authenticated/home'
     | '/_authenticated/map'
     | '/_authenticated/profile'
     | '/_authenticated/sell'
+    | '/_authenticated/seller'
     | '/_authenticated/listings/$id'
   fileRoutesById: FileRoutesById
 }
@@ -166,6 +190,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedChatsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/collector': {
+      id: '/_authenticated/collector'
+      path: '/collector'
+      fullPath: '/collector'
+      preLoaderRoute: typeof AuthenticatedCollectorRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/home': {
       id: '/_authenticated/home'
       path: '/home'
@@ -194,6 +225,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSellRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/seller': {
+      id: '/_authenticated/seller'
+      path: '/seller'
+      fullPath: '/seller'
+      preLoaderRoute: typeof AuthenticatedSellerRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/listings/$id': {
       id: '/_authenticated/listings/$id'
       path: '/listings/$id'
@@ -206,19 +244,23 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteChildren {
   AuthenticatedChatsRoute: typeof AuthenticatedChatsRoute
+  AuthenticatedCollectorRoute: typeof AuthenticatedCollectorRoute
   AuthenticatedHomeRoute: typeof AuthenticatedHomeRoute
   AuthenticatedMapRoute: typeof AuthenticatedMapRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedSellRoute: typeof AuthenticatedSellRoute
+  AuthenticatedSellerRoute: typeof AuthenticatedSellerRoute
   AuthenticatedListingsIdRoute: typeof AuthenticatedListingsIdRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedChatsRoute: AuthenticatedChatsRoute,
+  AuthenticatedCollectorRoute: AuthenticatedCollectorRoute,
   AuthenticatedHomeRoute: AuthenticatedHomeRoute,
   AuthenticatedMapRoute: AuthenticatedMapRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedSellRoute: AuthenticatedSellRoute,
+  AuthenticatedSellerRoute: AuthenticatedSellerRoute,
   AuthenticatedListingsIdRoute: AuthenticatedListingsIdRoute,
 }
 

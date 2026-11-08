@@ -1,0 +1,68 @@
+services:
+  - type: web
+    name: scrapmart-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    plan: starter
+    envVars:
+      - key: ENV
+        value: production
+      - key: API_PREFIX
+        value: /api/v1
+      - key: AUTO_CREATE_TABLES
+        value: "true"
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ACCESS_TOKEN_MINUTES
+        value: "60"
+      - key: REFRESH_TOKEN_DAYS
+        value: "30"
+      - key: CURSOR_SECRET
+        generateValue: true
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: SHARD_DB_PASSWORD
+        sync: false
+      - key: SHARD_URLS
+        sync: false
+      - key: SHARD_DIRECTORY_SHARDS
+        value: "0,1,2,3,4,5"
+      - key: SHARD_QUOTA_MB
+        value: "500"
+      - key: SHARD_SSLMODE
+        value: require
+      - key: SHARD_POOL_SIZE
+        value: "5"
+      - key: SHARD_MAX_OVERFLOW
+        value: "10"
+      - key: SHARD_STATEMENT_TIMEOUT_MS
+        value: "30000"
+      - key: MAP_REDIS_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: REDIS_CACHE_URL
+        sync: false
+      - key: REDIS_FALLBACK_URL
+        sync: false
+      - key: MAP_REDIS_FALLBACK_URL
+        sync: false
+      - key: MAP_TRUST_PROXY_HEADERS
+        value: "true"
+      - key: MAP_OSRM_URL
+        value: https://router.project-osrm.org
+      - key: CHAT_DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        value: https://khdbvhcdvtqmreatcssb.supabase.co
+      - key: SUPABASE_STORAGE_BUCKET
+        value: scrapmart-media
+
