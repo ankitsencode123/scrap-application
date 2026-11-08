@@ -1,10 +1,18 @@
+import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { MapPin, Scale } from "lucide-react";
-import type { ApiListing } from "@/lib/api";
+import { resolveMediaUrl, type ApiListing } from "@/lib/api";
 import { categoryOf, formatINR, statusLabel } from "@/lib/scrap";
 
 export function ListingCard({ listing, distance }: { listing: ApiListing; distance?: number | null | undefined }) {
-  const url = listing.images[0]?.url;
+  const [imgError, setImgError] = useState(false);
+  const rawUrl = listing.images[0]?.url;
+
+  useEffect(() => {
+    setImgError(false);
+  }, [rawUrl]);
+
+  const url = !imgError ? resolveMediaUrl(rawUrl) : null;
   distance = distance ?? listing.distance_km;
   const cat = categoryOf(listing.category);
   return (
@@ -15,7 +23,13 @@ export function ListingCard({ listing, distance }: { listing: ApiListing; distan
     >
       <div className="relative size-24 shrink-0 overflow-hidden rounded-xl bg-muted md:aspect-[4/3] md:size-auto md:w-full md:rounded-none">
         {url ? (
-          <img src={url} alt={listing.title} loading="lazy" className="size-full object-cover transition group-hover:scale-105" />
+          <img
+            src={url}
+            alt={listing.title}
+            loading="lazy"
+            onError={() => setImgError(true)}
+            className="size-full object-cover transition group-hover:scale-105"
+          />
         ) : (
           <div className="flex size-full items-center justify-center text-3xl">{cat.emoji}</div>
         )}

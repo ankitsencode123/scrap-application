@@ -91,7 +91,16 @@ class Settings:
         self.SUPABASE_KEY = os.getenv("SUPABASE_KEY", os.getenv("SUPABASE_SERVICE_ROLE_KEY", ""))
         self.SUPABASE_STORAGE_BUCKET = os.getenv("SUPABASE_STORAGE_BUCKET", "scrapmart-media")
 
-        self.PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/")
+        render_url = os.getenv("RENDER_EXTERNAL_URL", "")
+        configured_base = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
+        if configured_base and "localhost" not in configured_base:
+            self.PUBLIC_BASE_URL = configured_base
+        elif render_url:
+            self.PUBLIC_BASE_URL = render_url.rstrip("/")
+        elif self.ENV == "production":
+            self.PUBLIC_BASE_URL = "https://scrap-application.onrender.com"
+        else:
+            self.PUBLIC_BASE_URL = configured_base or "http://localhost:8000"
         self.LOCAL_UPLOAD_DIR = os.getenv("LOCAL_UPLOAD_DIR", "./uploads")
 
         # Redis configurations

@@ -94,7 +94,7 @@ app.add_middleware(
 
 app.include_router(api)
 
-@app.get("/media/{key:path}", tags=["Media"])
+@app.api_route("/media/{key:path}", methods=["GET", "HEAD"], tags=["Media"])
 def get_media_file(key: str):
     from fastapi.responses import Response
 

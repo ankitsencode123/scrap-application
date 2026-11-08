@@ -1,9 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Loader2, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
-import { api, errorMessage, type ApiBid, type ApiListing, type ApiTracker, type UserBrief } from "@/lib/api";
+import { api, errorMessage, resolveMediaUrl, type ApiBid, type ApiListing, type ApiTracker, type UserBrief } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,6 +69,11 @@ function ListingPage() {
     queryFn: () => api<ApiTracker>(`/listings/${id}/tracker`),
   });
   const [activeImgIdx, setActiveImgIdx] = useState(0);
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [activeImgIdx, id]);
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [rating, setRating] = useState(5);
@@ -142,35 +147,56 @@ function ListingPage() {
   };
 
   const currentImg = l.images[activeImgIdx] ?? l.images[0];
+  const currentUrl = !imgError && currentImg?.url ? resolveMediaUrl(currentImg.url) : null;
 
   return (
     <div className="mx-auto grid max-w-5xl gap-5 md:grid-cols-[1.1fr_1fr]">
       <div className="space-y-4">
-        {currentImg && (
+        {currentUrl ? (
           <div className="relative overflow-hidden rounded-3xl border bg-muted">
-            <img src={currentImg.url} alt={l.title} className="aspect-[4/3] w-full object-cover transition-all" />
+            <img
+              src={currentUrl}
+              alt={l.title}
+              onError={() => setImgError(true)}
+              className="aspect-[4/3] w-full object-cover transition-all"
+            />
             {l.images.length > 1 && (
               <span className="absolute bottom-3 right-3 rounded-full bg-black/70 px-2.5 py-1 text-xs font-semibold text-white shadow backdrop-blur-sm">
                 📷 {activeImgIdx + 1} / {l.images.length}
               </span>
             )}
           </div>
+        ) : (
+          <div className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-3xl border bg-muted/60 text-muted-foreground shadow-xs">
+            <span className="text-5xl">{categoryOf(l.category).emoji}</span>
+            <span className="text-sm font-semibold">{categoryOf(l.category).label}</span>
+          </div>
         )}
         {l.images.length > 1 && (
           <div className="flex gap-2 overflow-x-auto pb-1">
-            {l.images.map((im, idx) => (
-              <button
-                key={im.id}
-                type="button"
-                onClick={() => setActiveImgIdx(idx)}
-                className={cn(
-                  "relative aspect-square size-16 shrink-0 overflow-hidden rounded-xl border-2 transition-all",
-                  activeImgIdx === idx ? "border-primary ring-2 ring-primary/40 shadow-sm" : "border-border opacity-70 hover:opacity-100"
-                )}
-              >
-                <img src={im.url} alt={l.title} loading="lazy" className="size-full object-cover" />
-              </button>
-            ))}
+            {l.images.map((im, idx) => {
+              const thumbUrl = resolveMediaUrl(im.url);
+              return (
+                <button
+                  key={im.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveImgIdx(idx);
+                    setImgError(false);
+                  }}
+                  className={cn(
+                    "relative aspect-square size-16 shrink-0 overflow-hidden rounded-xl border-2 transition-all",
+                    activeImgIdx === idx ? "border-primary ring-2 ring-primary/40 shadow-sm" : "border-border opacity-70 hover:opacity-100"
+                  )}
+                >
+                  {thumbUrl ? (
+                    <img src={thumbUrl} alt={l.title} loading="lazy" className="size-full object-cover" />
+                  ) : (
+                    <div className="flex size-full items-center justify-center text-lg">{categoryOf(l.category).emoji}</div>
+                  )}
+                </button>
+              );
+            })}
           </div>
         )}
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
