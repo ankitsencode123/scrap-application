@@ -214,26 +214,23 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
   // 2. DYNAMIC STOPS & REAL VALUE CALCULATIONS
   // --------------------------------------------------------------------------
 
-  // Collector's assigned pickups from myListings
+  // Collector's assigned pickups from myListings (only actual accepted customer orders)
   const collectorAssigned = useMemo(() => {
     if (role !== "collector") return [];
     return myListings.filter(
-      (l) => l.is_assigned_collector && ["offer_accepted", "on_the_way", "arrived", "completed"].includes(l.status),
+      (l) => l.is_assigned_collector && ["offer_accepted", "on_the_way", "arrived"].includes(l.status),
     );
   }, [role, myListings]);
 
-  // Combined stops for collector view: Assigned pickups first, then open marketplace listings
+  // Real assigned stops for collector view: ONLY real assigned customer pickups
   const collectorStops: StopItem[] = useMemo(() => {
     if (role !== "collector") return [];
-    const list: StopItem[] = [];
-
-    // Assigned stops
-    collectorAssigned.forEach((l, i) => {
-      const lat = l.latitude ?? userPos[0] + 0.008 * (i + 1);
-      const lng = l.longitude ?? userPos[1] + 0.008 * (i + 1);
-      list.push({
+    return collectorAssigned.map((l) => {
+      const lat = l.latitude ?? userPos[0];
+      const lng = l.longitude ?? userPos[1];
+      return {
         id: l.id,
-        label: `${l.title} · ${l.address || "Assigned Pickup"}`,
+        label: `${l.title} · ${l.address || "Customer Address"}`,
         pos: [lat, lng],
         category: l.category,
         category_label: l.category_label || getScrapMeta(l.category).label,
@@ -242,31 +239,9 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
         status: l.status,
         is_mine: true,
         done: l.status === "completed",
-      });
+      };
     });
-
-    // Nearby open marketplace pickups
-    const openItems = mapListingsData?.items ?? [];
-    openItems.forEach((m) => {
-      if (list.length >= 8) return;
-      if (!list.some((existing) => existing.id === m.id)) {
-        list.push({
-          id: m.id,
-          label: m.title,
-          pos: [m.lat, m.lng],
-          category: m.category,
-          category_label: m.category_label,
-          kg: m.weight_kg,
-          expected_price: m.expected_price,
-          status: m.status,
-          is_mine: false,
-          done: false,
-        });
-      }
-    });
-
-    return list;
-  }, [role, collectorAssigned, mapListingsData?.items, userPos]);
+  }, [role, collectorAssigned, userPos]);
 
   // Real vehicle utilization calculations
   const VEHICLE_MAX_KG = 500;
@@ -595,30 +570,29 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
         }
       }
     } else {
-      // Collector View: Waypoint 1 = Collector, Waypoints 2..N = Stops, Final = Recycling Destination
+      // Collector View: Only build route when collector has real assigned customer pickups!
       if (collectorStops.length > 0) {
         waypoints.push(userPos);
 
-        collectorStops.slice(0, 5).forEach((stop, i) => {
+        collectorStops.forEach((stop, i) => {
           const meta = getScrapMeta(stop.category);
           L.marker(stop.pos, {
             icon: divIcon(`<div class="pin pin-pickup"><span>${i + 1}</span></div>`, 34, [17, 34]),
           })
             .bindPopup(
-              `<b>Stop ${i + 1} · ${stop.label}</b><br/>${meta.emoji} ${meta.label} · ${stop.kg} kg<br/>₹${stop.expected_price.toLocaleString("en-IN")} ${stop.is_mine ? "· Accepted" : "· Open Request"}`,
+              `<b>Customer Pickup ${i + 1} · ${stop.label}</b><br/>${meta.emoji} ${meta.label} · ${stop.kg} kg<br/>₹${stop.expected_price.toLocaleString("en-IN")}`,
             )
             .addTo(sl);
           waypoints.push(stop.pos);
         });
 
-        // Final destination marker
-        waypoints.push(destination.pos);
-        if (destinationMarker.current) destinationMarker.current.remove();
-        destinationMarker.current = L.marker(destination.pos, {
-          icon: divIcon('<div class="pin pin-dest"><span>★</span></div>', 34, [17, 34]),
-        })
-          .bindPopup(`<b>${destination.name}</b><br/>Final Material Recycling Destination`)
-          .addTo(sl);
+        if (destinationMarker.current) {
+          destinationMarker.current.remove();
+          destinationMarker.current = null;
+        }
+      } else {
+        waypoints = [];
+        m.setView(userPos, 14);
       }
     }
 
@@ -644,7 +618,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
       if (routeLayers.current) {
         routeLayers.current.clearLayers();
       }
-      if (destinationMarker.current && role === "seller") {
+      if (destinationMarker.current) {
         destinationMarker.current.remove();
         destinationMarker.current = null;
       }
@@ -675,7 +649,9 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
     const rl = routeLayers.current;
     if (!m || !rl) return;
 
-    if (!path.length || (role === "seller" && !isTrackingActive)) {
+    const isNavActive = role === "seller" ? isTrackingActive : collectorStops.length > 0;
+
+    if (!path.length || !isNavActive) {
       rl.clearLayers();
       if (vehicle.current) {
         vehicle.current.remove();
@@ -754,17 +730,18 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
     });
 
     return () => clearInterval(t);
-  }, [routes, activeRoute, isTrackingActive, role]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [routes, activeRoute, isTrackingActive, role, collectorStops.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Vehicle movement & tracking
   useEffect(() => {
-    if (loading || !path.length || (role === "seller" && !isTrackingActive)) return;
+    const isNavActive = role === "seller" ? isTrackingActive : collectorStops.length > 0;
+    if (loading || !path.length || !isNavActive) return;
     const t = setInterval(
       () => setProgress((p) => Math.min(path.length - 1, p + Math.max(1, Math.round(path.length / 350)))),
       400,
     );
     return () => clearInterval(t);
-  }, [loading, path.length, role, isTrackingActive]);
+  }, [loading, path.length, role, isTrackingActive, collectorStops.length]);
 
   useEffect(() => {
     if (!path.length || !vehicle.current) return;
@@ -811,7 +788,11 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
       if (activeListing.status === "arrived") return "Collector has arrived at your doorstep";
       if (activeListing.status === "completed") return "Scrap collected and payout completed";
     }
-    return finished ? "All stops completed" : `En route to Stop ${Math.min(collectorStops.length, 1)}`;
+    return finished
+      ? "All pickups completed"
+      : collectorStops.length > 0
+        ? `En route to Customer Pickup`
+        : "Marketplace Active";
   }, [finished, role, activeListing, collectorStops.length]);
 
   const recalcRoute = () => {
@@ -878,7 +859,9 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
               ? isTrackingActive
                 ? "Locating live scrap dispatch…"
                 : "Loading marketplace map…"
-              : "Computing real pickup route…"}
+              : collectorStops.length > 0
+                ? "Computing pickup route…"
+                : "Loading collector map…"}
           </p>
           <div className="mx-auto mt-3 h-1.5 w-48 overflow-hidden rounded-full bg-secondary">
             <div className="h-full w-1/3 rounded-full bg-primary animate-load" />
@@ -933,7 +916,10 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
           </span>
           {role === "collector" && (
             <span className="glass-panel flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold">
-              <Users className="h-3.5 w-3.5 text-primary" /> {collectorStops.length} real stops
+              <Users className="h-3.5 w-3.5 text-primary" />
+              {collectorStops.length > 0
+                ? `${collectorStops.length} assigned pickup${collectorStops.length > 1 ? "s" : ""}`
+                : `${mapListingsData?.items?.length ?? 0} open requests`}
             </span>
           )}
           {onSwitchToListings && (
@@ -1339,85 +1325,140 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
           {/* ================= COLLECTOR VIEW ================= */}
           {role === "collector" && (
             <>
-              {/* Vehicle utilization gauge */}
-              <div className="rounded-2xl border border-border p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <h3 className="flex items-center gap-1.5 text-sm font-bold">
-                    <Truck className="h-4 w-4 text-primary" /> Vehicle Payload
-                  </h3>
-                  <span className="text-xs text-muted-foreground">
-                    {collectorCompletedStops}/{Math.max(1, collectorStops.length)} stops done
-                  </span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-secondary">
-                  <div
-                    className="h-full rounded-full bg-primary transition-all duration-500"
-                    style={{ width: `${collectorCapacityUsedPct}%` }}
-                  />
-                </div>
-                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                  <Stat v={collectorCompletedStops} l="Completed" />
-                  <Stat v={Math.max(0, collectorStops.length - collectorCompletedStops)} l="Pending" />
-                  <Stat v={`${collectorTotalKg} kg`} l={`${collectorCapacityUsedPct}% of ${VEHICLE_MAX_KG}kg`} />
-                </div>
+              {collectorStops.length > 0 ? (
+                <>
+                  {/* Vehicle utilization gauge */}
+                  <div className="rounded-2xl border border-border p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <h3 className="flex items-center gap-1.5 text-sm font-bold">
+                        <Truck className="h-4 w-4 text-primary" /> Vehicle Payload
+                      </h3>
+                      <span className="text-xs text-muted-foreground">
+                        {collectorCompletedStops}/{collectorStops.length} pickups done
+                      </span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-secondary">
+                      <div
+                        className="h-full rounded-full bg-primary transition-all duration-500"
+                        style={{ width: `${collectorCapacityUsedPct}%` }}
+                      />
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                      <Stat v={collectorCompletedStops} l="Completed" />
+                      <Stat v={Math.max(0, collectorStops.length - collectorCompletedStops)} l="Pending" />
+                      <Stat v={`${collectorTotalKg} kg`} l={`${collectorCapacityUsedPct}% of ${VEHICLE_MAX_KG}kg`} />
+                    </div>
 
-                {/* Real stops checklist */}
-                <ul className="mt-3 space-y-1.5 text-xs">
-                  {collectorStops.map((p, i) => {
-                    const meta = getScrapMeta(p.category);
-                    return (
-                      <li key={p.id} className="flex items-center gap-2">
-                        <span
-                          className={`grid h-5 w-5 place-items-center rounded-full text-[10px] font-bold ${
-                            p.done ? "bg-success text-card" : "bg-secondary text-secondary-foreground"
+                    {/* Customer stops checklist */}
+                    <ul className="mt-3 space-y-1.5 text-xs">
+                      {collectorStops.map((p, i) => {
+                        const meta = getScrapMeta(p.category);
+                        return (
+                          <li key={p.id} className="flex items-center gap-2">
+                            <span
+                              className={`grid h-5 w-5 place-items-center rounded-full text-[10px] font-bold ${
+                                p.done ? "bg-success text-card" : "bg-primary text-primary-foreground"
+                              }`}
+                            >
+                              {i + 1}
+                            </span>
+                            <span className="flex-1 truncate">{p.label}</span>
+                            <span className="text-muted-foreground font-semibold">
+                              {meta.emoji} {p.kg} kg · ₹{p.expected_price.toLocaleString("en-IN")}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+
+                  {/* Dynamic Route Options */}
+                  <div className="rounded-2xl border border-border p-3">
+                    <h3 className="mb-2 flex items-center gap-1.5 text-sm font-bold">
+                      <RouteIcon className="h-4 w-4 text-info" /> Driving Corridors (OSRM)
+                    </h3>
+                    <div className="space-y-1.5">
+                      {routes.map((r, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setActiveRoute(i)}
+                          className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs transition ${
+                            i === activeRoute ? "bg-info/10 font-semibold text-info" : "hover:bg-muted"
                           }`}
                         >
-                          {i + 1}
-                        </span>
-                        <span className="flex-1 truncate">{p.label}</span>
-                        <span className="text-muted-foreground">
-                          {meta.emoji} {p.kg} kg · ₹{p.expected_price.toLocaleString("en-IN")}
-                        </span>
-                      </li>
-                    );
-                  })}
-                  <li className="flex items-center gap-2">
-                    <span className="grid h-5 w-5 place-items-center rounded-full bg-destructive text-[10px] text-card">
-                      ★
-                    </span>
-                    <span className="flex-1 truncate">{destination.name}</span>
-                  </li>
-                </ul>
-              </div>
-
-              {/* Dynamic Route Options */}
-              <div className="rounded-2xl border border-border p-3">
-                <h3 className="mb-2 flex items-center gap-1.5 text-sm font-bold">
-                  <RouteIcon className="h-4 w-4 text-info" /> Driving Corridors (OSRM)
-                </h3>
-                <div className="space-y-1.5">
-                  {routes.map((r, i) => (
+                          <span>{i === 0 ? "Fastest road corridor" : `Alternate highway ${i}`}</span>
+                          <span>
+                            {pathLength(r).toFixed(1)} km · {Math.round((pathLength(r) / SPEED_KMH) * 60)} min
+                          </span>
+                        </button>
+                      ))}
+                    </div>
                     <button
-                      key={i}
-                      onClick={() => setActiveRoute(i)}
-                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs transition ${
-                        i === activeRoute ? "bg-info/10 font-semibold text-info" : "hover:bg-muted"
-                      }`}
+                      onClick={recalcRoute}
+                      className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl bg-secondary py-2 text-xs font-semibold text-secondary-foreground hover:bg-muted"
                     >
-                      <span>{i === 0 ? "Fastest road corridor" : `Alternate highway ${i}`}</span>
-                      <span>
-                        {pathLength(r).toFixed(1)} km · {Math.round((pathLength(r) / SPEED_KMH) * 60)} min
-                      </span>
+                      <RefreshCw className="h-3.5 w-3.5" /> Recalculate route
                     </button>
-                  ))}
+                  </div>
+                </>
+              ) : (
+                /* No active customer orders accepted yet */
+                <div className="space-y-3">
+                  <div className="rounded-2xl border border-dashed border-border p-4 text-center">
+                    <div className="mx-auto mb-2 grid h-10 w-10 place-items-center rounded-full bg-primary/10 text-primary">
+                      <Truck className="size-5" />
+                    </div>
+                    <h4 className="font-bold text-sm">No Active Pickup Orders</h4>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      When an actual customer accepts your offer, live GPS navigation, customer doorstep routing, and ETA will appear here.
+                    </p>
+                    <Button
+                      onClick={() => navigate({ to: "/home" })}
+                      className="mt-3 w-full rounded-xl bg-primary text-xs font-bold text-primary-foreground"
+                    >
+                      Browse Open Requests ({mapListingsData?.items?.length ?? 0} nearby)
+                    </Button>
+                  </div>
+
+                  {/* Open requests in zone to bid on */}
+                  {mapListingsData?.items && mapListingsData.items.length > 0 && (
+                    <div className="rounded-2xl border border-border p-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                          <Sparkles className="size-3.5 text-accent" />
+                          Open Requests in Your Zone
+                        </h4>
+                        <span className="text-[10px] font-semibold text-muted-foreground">
+                          {mapListingsData.items.length} available
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        {mapListingsData.items.slice(0, 4).map((item) => {
+                          const meta = getScrapMeta(item.category);
+                          return (
+                            <div
+                              key={item.id}
+                              onClick={() => navigate({ to: `/listings/${item.id}` })}
+                              className="flex items-center justify-between rounded-xl bg-secondary/60 hover:bg-secondary p-2.5 cursor-pointer transition"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="font-semibold text-xs truncate">{item.title}</p>
+                                <p className="text-[10px] text-muted-foreground">
+                                  {meta.emoji} {item.category_label || meta.label} · {item.weight_kg} kg
+                                  {item.distance_km != null ? ` · ${item.distance_km.toFixed(1)} km away` : ""}
+                                </p>
+                              </div>
+                              <span className="text-xs font-extrabold text-primary ml-2 shrink-0">
+                                ₹{item.expected_price.toLocaleString("en-IN")}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <button
-                  onClick={recalcRoute}
-                  className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl bg-secondary py-2 text-xs font-semibold text-secondary-foreground hover:bg-muted"
-                >
-                  <RefreshCw className="h-3.5 w-3.5" /> Recalculate route
-                </button>
-              </div>
+              )}
 
               {/* Real Scrap Density Breakdown in Zone */}
               <div className="rounded-2xl border border-border p-3">
