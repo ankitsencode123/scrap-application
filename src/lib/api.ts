@@ -5,6 +5,29 @@ const RAW_URL = (import.meta.env["VITE_API_URL"] as string | undefined) ?? "http
 export const API_URL = RAW_URL.replace(/\/+$/, "");
 export const WS_CHAT_URL = API_URL.replace(/^http/, "ws") + "/chat/ws";
 
+/** Normalizes media/avatar URLs to point to the current production backend if saved with localhost/relative path */
+export function resolveMediaUrl(url?: string | null): string | null {
+  if (!url) return null;
+  const raw = url.trim();
+  if (!raw) return null;
+
+  // If pointing to localhost / 127.0.0.1 from local dev, rewrite to the active backend base
+  if (raw.includes("localhost:8000") || raw.includes("127.0.0.1:8000")) {
+    const backendBase = API_URL.replace(/\/api\/v1\/?$/, "");
+    return raw.replace(/^https?:\/\/(localhost|127\.0\.0\.1):8000/, backendBase);
+  }
+
+  // If a relative /media path was stored
+  if (raw.startsWith("/media/") || raw.startsWith("media/")) {
+    const backendBase = API_URL.replace(/\/api\/v1\/?$/, "");
+    const cleanPath = raw.startsWith("/") ? raw : `/${raw}`;
+    return `${backendBase}${cleanPath}`;
+  }
+
+  return raw;
+}
+
+
 // ---------------------------------------------------------------- types ----
 export type Role = "seller" | "collector";
 export type ListingStatus = "posted" | "offer_accepted" | "on_the_way" | "arrived" | "completed" | "cancelled";

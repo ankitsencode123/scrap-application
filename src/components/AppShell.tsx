@@ -3,6 +3,7 @@ import { Home, Map, MessageCircle, Plus, User } from "lucide-react";
 import type { ReactNode } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
+import { UserAvatar } from "@/components/UserAvatar";
 
 const NAV = [
   { to: "/home", label: "Home", icon: Home },
@@ -45,8 +46,13 @@ export function AppShell({ children }: { children: ReactNode }) {
                       : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
               >
-                {n.to === "/profile" && profile?.avatar_url ? (
-                  <img src={profile.avatar_url} alt="" className="size-4 rounded-full object-cover" />
+                {n.to === "/profile" ? (
+                  <UserAvatar
+                    src={profile?.avatar_url}
+                    name={profile?.display_name}
+                    className="size-4"
+                    fallbackClassName="size-4 text-[9px]"
+                  />
                 ) : (
                   <n.icon className="size-4" />
                 )}
@@ -63,9 +69,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             )}
           </nav>
           <div className="flex items-center gap-2 md:hidden">
-            {profile?.avatar_url && (
-              <img src={profile.avatar_url} alt="" className="size-6 rounded-full object-cover" />
-            )}
+            <Link to="/profile" className="flex items-center">
+              <UserAvatar
+                src={profile?.avatar_url}
+                name={profile?.display_name}
+                className="size-7"
+                fallbackClassName="size-7 text-xs bg-primary text-primary-foreground font-bold shadow-sm"
+              />
+            </Link>
             <span className="rounded-full bg-primary-soft px-3 py-1 text-xs font-semibold text-primary">
               {isCollector ? "Collector" : "Seller"}
             </span>
@@ -97,11 +108,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                   active ? "text-primary" : "text-muted-foreground",
                 )}
               >
-                {n.to === "/profile" && profile?.avatar_url ? (
-                  <img
-                    src={profile.avatar_url}
-                    alt=""
-                    className={cn("size-5 rounded-full object-cover", active && "ring-2 ring-primary")}
+                {n.to === "/profile" ? (
+                  <UserAvatar
+                    src={profile?.avatar_url}
+                    name={profile?.display_name}
+                    className={cn("size-5", active && "ring-2 ring-primary")}
+                    fallbackClassName={cn("size-5 text-[10px]", active && "ring-2 ring-primary")}
                   />
                 ) : (
                   <n.icon className={cn("size-5", active && "stroke-[2.5]")} />

@@ -36,6 +36,7 @@ import {
   MapPin,
   Loader2,
   AlertCircle,
+  Clock,
 } from "lucide-react";
 import {
   DEFAULT_CENTER,
@@ -546,52 +547,79 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
     let waypoints: LatLng[] = [];
 
     if (role === "seller") {
-      // Seller View: Waypoint 1 = Collector position, Waypoint 2 = Seller pickup location
-      const sellerPickupPos: LatLng = [
-        activeListing?.latitude ?? userPos[0],
-        activeListing?.longitude ?? userPos[1],
-      ];
+      if (isTrackingActive && activeListing) {
+        // Seller View: Collector assigned & live tracking active
+        const sellerPickupPos: LatLng = [
+          activeListing.latitude ?? userPos[0],
+          activeListing.longitude ?? userPos[1],
+        ];
 
-      // Collector vehicle position: from real tracking or starting ~1.6km away
-      const collectorPos: LatLng = trackingData?.collector
-        ? [trackingData.collector.lat, trackingData.collector.lng]
-        : [userPos[0] + 0.015, userPos[1] - 0.012];
+        // Collector vehicle position: from real tracking or starting nearby
+        const collectorPos: LatLng = trackingData?.collector
+          ? [trackingData.collector.lat, trackingData.collector.lng]
+          : [sellerPickupPos[0] + 0.012, sellerPickupPos[1] - 0.008];
 
-      // Place pickup marker
-      const meta = getScrapMeta(activeListing?.category);
-      L.marker(sellerPickupPos, {
-        icon: divIcon('<div class="pin pin-pickup"><span>1</span></div>', 34, [17, 34]),
-      })
-        .bindPopup(
-          `<b>Your Scrap Pickup</b><br/>${meta.emoji} ${meta.label} · ${activeListing?.weight_kg ?? 45} kg<br/>Expected Payout: ₹${((activeListing?.final_price ?? activeListing?.expected_price) || 0).toLocaleString("en-IN")}`,
-        )
-        .addTo(sl);
-
-      waypoints = [collectorPos, sellerPickupPos];
-    } else {
-      // Collector View: Waypoint 1 = Collector, Waypoints 2..N = Stops, Final = Recycling Destination
-      waypoints.push(userPos);
-
-      collectorStops.slice(0, 5).forEach((stop, i) => {
-        const meta = getScrapMeta(stop.category);
-        L.marker(stop.pos, {
-          icon: divIcon(`<div class="pin pin-pickup"><span>${i + 1}</span></div>`, 34, [17, 34]),
+        // Place pickup marker
+        const meta = getScrapMeta(activeListing.category);
+        L.marker(sellerPickupPos, {
+          icon: divIcon('<div class="pin pin-pickup"><span>1</span></div>', 34, [17, 34]),
         })
           .bindPopup(
-            `<b>Stop ${i + 1} · ${stop.label}</b><br/>${meta.emoji} ${meta.label} · ${stop.kg} kg<br/>₹${stop.expected_price.toLocaleString("en-IN")} ${stop.is_mine ? "· Accepted" : "· Open Request"}`,
+            `<b>Your Scrap Pickup</b><br/>${meta.emoji} ${meta.label} · ${activeListing.weight_kg ?? 0} kg<br/>Expected Payout: ₹${((activeListing.final_price ?? activeListing.expected_price) || 0).toLocaleString("en-IN")}`,
           )
           .addTo(sl);
-        waypoints.push(stop.pos);
-      });
 
-      // Final destination marker
-      waypoints.push(destination.pos);
-      if (destinationMarker.current) destinationMarker.current.remove();
-      destinationMarker.current = L.marker(destination.pos, {
-        icon: divIcon('<div class="pin pin-dest"><span>★</span></div>', 34, [17, 34]),
-      })
-        .bindPopup(`<b>${destination.name}</b><br/>Final Material Recycling Destination`)
-        .addTo(sl);
+        waypoints = [collectorPos, sellerPickupPos];
+      } else {
+        // Seller View: No active pickup tracking
+        waypoints = [];
+
+        if (activeListing) {
+          // Scrap listing posted (awaiting collector bids)
+          const sellerPickupPos: LatLng = [
+            activeListing.latitude ?? userPos[0],
+            activeListing.longitude ?? userPos[1],
+          ];
+          const meta = getScrapMeta(activeListing.category);
+          L.marker(sellerPickupPos, {
+            icon: divIcon('<div class="pin pin-pickup"><span>1</span></div>', 34, [17, 34]),
+          })
+            .bindPopup(
+              `<b>Your Scrap Listing (Awaiting Bids)</b><br/>${meta.emoji} ${meta.label} · ${activeListing.weight_kg ?? 0} kg<br/>Expected Payout: ₹${((activeListing.final_price ?? activeListing.expected_price) || 0).toLocaleString("en-IN")}`,
+            )
+            .addTo(sl);
+
+          m.setView(sellerPickupPos, 15);
+        } else {
+          m.setView(userPos, 14);
+        }
+      }
+    } else {
+      // Collector View: Waypoint 1 = Collector, Waypoints 2..N = Stops, Final = Recycling Destination
+      if (collectorStops.length > 0) {
+        waypoints.push(userPos);
+
+        collectorStops.slice(0, 5).forEach((stop, i) => {
+          const meta = getScrapMeta(stop.category);
+          L.marker(stop.pos, {
+            icon: divIcon(`<div class="pin pin-pickup"><span>${i + 1}</span></div>`, 34, [17, 34]),
+          })
+            .bindPopup(
+              `<b>Stop ${i + 1} · ${stop.label}</b><br/>${meta.emoji} ${meta.label} · ${stop.kg} kg<br/>₹${stop.expected_price.toLocaleString("en-IN")} ${stop.is_mine ? "· Accepted" : "· Open Request"}`,
+            )
+            .addTo(sl);
+          waypoints.push(stop.pos);
+        });
+
+        // Final destination marker
+        waypoints.push(destination.pos);
+        if (destinationMarker.current) destinationMarker.current.remove();
+        destinationMarker.current = L.marker(destination.pos, {
+          icon: divIcon('<div class="pin pin-dest"><span>★</span></div>', 34, [17, 34]),
+        })
+          .bindPopup(`<b>${destination.name}</b><br/>Final Material Recycling Destination`)
+          .addTo(sl);
+      }
     }
 
     // Fetch dynamic driving routes via OSRM
@@ -607,9 +635,22 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
         setTimeout(() => setLoading(false), 400);
       });
     } else {
+      setRoutes([]);
+      setProgress(0);
+      if (vehicle.current) {
+        vehicle.current.remove();
+        vehicle.current = null;
+      }
+      if (routeLayers.current) {
+        routeLayers.current.clearLayers();
+      }
+      if (destinationMarker.current && role === "seller") {
+        destinationMarker.current.remove();
+        destinationMarker.current = null;
+      }
       setLoading(false);
     }
-  }, [role, activeListing, userPos, destination, collectorStops, trackingData?.collector]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [role, activeListing, isTrackingActive, userPos, destination, collectorStops, trackingData?.collector]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --------------------------------------------------------------------------
   // 9. DRAW ACTIVE ROUTES & TRAFFIC
@@ -632,8 +673,16 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
   useEffect(() => {
     const m = map.current;
     const rl = routeLayers.current;
-    if (!m || !rl || !path.length) return;
-    rl.clearLayers();
+    if (!m || !rl) return;
+
+    if (!path.length || (role === "seller" && !isTrackingActive)) {
+      rl.clearLayers();
+      if (vehicle.current) {
+        vehicle.current.remove();
+        vehicle.current = null;
+      }
+      return;
+    }
 
     const C = {
       info: css("--info") || "#3b82f6",
@@ -705,17 +754,17 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
     });
 
     return () => clearInterval(t);
-  }, [routes, activeRoute]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [routes, activeRoute, isTrackingActive, role]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Vehicle movement & tracking
   useEffect(() => {
-    if (loading || !path.length) return;
+    if (loading || !path.length || (role === "seller" && !isTrackingActive)) return;
     const t = setInterval(
       () => setProgress((p) => Math.min(path.length - 1, p + Math.max(1, Math.round(path.length / 350)))),
       400,
     );
     return () => clearInterval(t);
-  }, [loading, path.length]);
+  }, [loading, path.length, role, isTrackingActive]);
 
   useEffect(() => {
     if (!path.length || !vehicle.current) return;
@@ -825,7 +874,11 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
             🚚
           </div>
           <p className="mt-4 font-display text-lg font-semibold">
-            {role === "seller" ? "Locating live scrap dispatch…" : "Computing real pickup route…"}
+            {role === "seller"
+              ? isTrackingActive
+                ? "Locating live scrap dispatch…"
+                : "Loading marketplace map…"
+              : "Computing real pickup route…"}
           </p>
           <div className="mx-auto mt-3 h-1.5 w-48 overflow-hidden rounded-full bg-secondary">
             <div className="h-full w-1/3 rounded-full bg-primary animate-load" />
@@ -1082,16 +1135,38 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
             <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {finished ? (
                 <CheckCircle2 className="h-3.5 w-3.5 text-success" />
-              ) : (
+              ) : isTrackingActive ? (
                 <span className="h-2 w-2 rounded-full bg-info animate-live" />
+              ) : activeListing ? (
+                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+              ) : (
+                <span className="h-2 w-2 rounded-full bg-muted-foreground" />
               )}
               {realStatusLabel}
             </p>
             <p className="font-display text-3xl font-bold leading-tight">
-              {finished ? "Completed" : `${etaMin} min ETA`}
+              {role === "seller"
+                ? isTrackingActive
+                  ? finished ? "Completed" : `${etaMin} min ETA`
+                  : activeListing?.status === "posted"
+                    ? "Listing Posted"
+                    : "No Active Pickup"
+                : finished
+                  ? "Completed"
+                  : collectorStops.length > 0
+                    ? `${etaMin} min ETA`
+                    : "Marketplace Active"}
             </p>
             <p className="text-sm text-muted-foreground">
-              {remainingKm.toFixed(1)} km remaining · {SPEED_KMH} km/h road avg
+              {role === "seller"
+                ? isTrackingActive
+                  ? `${remainingKm.toFixed(1)} km remaining · ${SPEED_KMH} km/h road avg`
+                  : activeListing?.status === "posted"
+                    ? `Awaiting bids from ${nearbyCollectors.length > 0 ? nearbyCollectors.length : "nearby"} collectors`
+                    : "Post scrap to schedule pickup and track live"
+                : collectorStops.length > 0
+                  ? `${remainingKm.toFixed(1)} km remaining · ${SPEED_KMH} km/h road avg`
+                  : "View open scrap pickup requests in your zone"}
             </p>
           </div>
           <button
@@ -1103,12 +1178,14 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
         </div>
 
         {/* Progress Bar */}
-        <div className="mx-5 h-2 overflow-hidden rounded-full bg-secondary">
-          <div
-            className="h-full rounded-full bg-primary transition-all duration-500"
-            style={{ width: `${Math.max(5, Math.min(100, pct * 100))}%` }}
-          />
-        </div>
+        {(isTrackingActive || (role === "collector" && collectorStops.length > 0)) && (
+          <div className="mx-5 h-2 overflow-hidden rounded-full bg-secondary">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-500"
+              style={{ width: `${Math.max(5, Math.min(100, pct * 100))}%` }}
+            />
+          </div>
+        )}
 
         {/* Scrollable Details */}
         <div className="mt-4 flex-1 space-y-4 overflow-y-auto px-5 pb-5">
@@ -1117,57 +1194,68 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
             <>
               {activeListing ? (
                 <>
-                  {/* Collector Profile Card */}
-                  <div className="flex items-center gap-3 rounded-2xl bg-secondary p-3">
-                    <div className="grid h-11 w-11 place-items-center rounded-full bg-primary font-display font-bold text-primary-foreground text-sm">
-                      {activeListing.collector?.display_name
-                        ? activeListing.collector.display_name.slice(0, 2).toUpperCase()
-                        : "SC"}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-sm truncate">
-                        {activeListing.collector?.display_name ?? "Assigning Nearby Collector…"}
-                        {activeListing.collector && (
+                  {/* Collector Profile Card: only displayed when a collector is assigned */}
+                  {isTrackingActive && activeListing.collector ? (
+                    <div className="flex items-center gap-3 rounded-2xl bg-secondary p-3">
+                      <div className="grid h-11 w-11 place-items-center rounded-full bg-primary font-display font-bold text-primary-foreground text-sm">
+                        {activeListing.collector.display_name.slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-sm truncate">
+                          {activeListing.collector.display_name}
                           <span className="ml-1 text-xs text-muted-foreground">
                             ★ {(activeListing.collector.rating_avg || 4.9).toFixed(1)}
                           </span>
-                        )}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {activeListing.collector?.phone
-                          ? activeListing.collector.phone
-                          : activeListing.status === "posted"
-                            ? `${nearbyCollectors.length} verified collectors nearby`
-                            : "Eco-Fleet Express Dispatch"}
-                      </p>
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {activeListing.collector.phone || "Eco-Fleet Express Dispatch"}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => navigate({ to: "/chats" })}
+                        className="grid h-9 w-9 place-items-center rounded-full bg-card text-primary shadow-sm hover:scale-105 transition"
+                        aria-label="Chat"
+                        title="Chat with collector"
+                      >
+                        <MessageCircle className="h-4 w-4" />
+                      </button>
+                      {activeListing.collector.phone && (
+                        <a
+                          href={`tel:${activeListing.collector.phone}`}
+                          onClick={() => toast.info(`Connecting call to collector (${activeListing.collector?.phone})`)}
+                          className="grid h-9 w-9 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm hover:scale-105 transition"
+                          aria-label="Call"
+                          title="Call collector"
+                        >
+                          <Phone className="h-4 w-4" />
+                        </a>
+                      )}
                     </div>
-                    <button
-                      onClick={() => navigate({ to: "/chats" })}
-                      className="grid h-9 w-9 place-items-center rounded-full bg-card text-primary shadow-sm hover:scale-105 transition"
-                      aria-label="Chat"
-                      title="Chat with collector"
-                    >
-                      <MessageCircle className="h-4 w-4" />
-                    </button>
-                    <a
-                      href={`tel:${activeListing.collector?.phone ?? "+919876543210"}`}
-                      onClick={() => toast.info(`Connecting call to collector (${activeListing.collector?.phone ?? "+91 98765 43210"})`)}
-                      className="grid h-9 w-9 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm hover:scale-105 transition"
-                      aria-label="Call"
-                      title="Call collector"
-                    >
-                      <Phone className="h-4 w-4" />
-                    </a>
-                  </div>
+                  ) : (
+                    /* Awaiting Collector Assignment State */
+                    <div className="flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-3.5">
+                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                        <Clock className="size-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-sm text-foreground">Awaiting Collector Offers</p>
+                        <p className="text-xs text-muted-foreground">
+                          {nearbyCollectors.length > 0
+                            ? `${nearbyCollectors.length} verified collectors nearby have been alerted.`
+                            : "Collectors in your area will bid for pickup soon."}
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Real Scrap Package Card */}
                   <div className="rounded-2xl border border-border p-3">
                     <div className="mb-2 flex items-center justify-between">
-                      <h3 className="text-sm font-bold flex items-center gap-1.5">
-                        <Sparkles className="size-4 text-accent" />
-                        {activeListing.title}
+                      <h3 className="text-sm font-bold flex items-center gap-1.5 truncate">
+                        <Sparkles className="size-4 text-accent shrink-0" />
+                        <span className="truncate">{activeListing.title}</span>
                       </h3>
-                      <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[10px]">
+                      <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] shrink-0">
                         #LST-{activeListing.id.slice(0, 8).toUpperCase()}
                       </span>
                     </div>
@@ -1190,8 +1278,13 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
                     <h3 className="mb-2 text-sm font-bold">Pickup status</h3>
                     <ol className="relative space-y-2.5 pl-1">
                       {STEPS.map((s, i) => {
-                        const done = i < currentStepIdx || finished;
-                        const active = i === currentStepIdx && !finished;
+                        const done =
+                          i < currentStepIdx ||
+                          (i === 0 && activeListing.status === "posted") ||
+                          finished;
+                        const active =
+                          (activeListing.status === "posted" ? i === 1 : i === currentStepIdx) &&
+                          !finished;
                         return (
                           <li key={s} className="flex items-center gap-3 text-sm">
                             <span
@@ -1233,10 +1326,10 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
                     Post a scrap pickup request to track verified collectors live on this map.
                   </p>
                   <Button
-                    onClick={() => navigate({ to: "/" })}
+                    onClick={() => navigate({ to: "/sell" })}
                     className="mt-3 w-full rounded-xl bg-primary text-xs font-bold text-primary-foreground"
                   >
-                    + Create Scrap Listing
+                    + Post Scrap for Pickup
                   </Button>
                 </div>
               )}

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Stars } from "@/components/Stars";
+import { UserAvatar } from "@/components/UserAvatar";
 import { PICKUP_STEPS, categoryOf, formatINR, statusLabel } from "@/lib/scrap";
 import { cn } from "@/lib/utils";
 
@@ -20,13 +21,12 @@ export const Route = createFileRoute("/_authenticated/listings/$id")({
 function PersonRow({ person, label }: { person: UserBrief; label: string }) {
   return (
     <div className="flex items-center gap-3">
-      <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-secondary font-bold text-secondary-foreground shadow-sm">
-        {person.avatar_url ? (
-          <img src={person.avatar_url} alt={person.display_name} className="size-full object-cover" />
-        ) : (
-          (person.display_name || "?").slice(0, 1).toUpperCase()
-        )}
-      </div>
+      <UserAvatar
+        src={person.avatar_url}
+        name={person.display_name}
+        className="size-10"
+        fallbackClassName="size-10 bg-secondary font-bold text-secondary-foreground shadow-sm"
+      />
       <div className="flex-1 min-w-0">
         <p className="text-xs text-muted-foreground">{label}</p>
         <p className="font-semibold truncate">{person.display_name || "User"}{person.city ? ` · ${person.city}` : ""}</p>
