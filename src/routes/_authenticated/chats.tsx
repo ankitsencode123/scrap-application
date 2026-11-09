@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useChatSocket } from "@/hooks/use-chat-socket";
+import { UserAvatar } from "@/components/UserAvatar";
 
 type Search = { listing?: string | undefined; with?: string | undefined };
 
@@ -22,7 +23,10 @@ export const Route = createFileRoute("/_authenticated/chats")({
       { title: "Chats — scrappe" },
       { name: "description", content: "Chat with sellers and collectors about scrap pickups." },
       { property: "og:title", content: "Chats — scrappe" },
-      { property: "og:description", content: "Chat with sellers and collectors about scrap pickups." },
+      {
+        property: "og:description",
+        content: "Chat with sellers and collectors about scrap pickups.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -44,14 +48,8 @@ function ChatsPage() {
     setActiveListingState(search.listing);
   }, [search.with, search.listing]);
 
-  const {
-    isConnected,
-    typingState,
-    presenceState,
-    sendChatMessage,
-    startTyping,
-    stopTyping,
-  } = useChatSocket(activeListingState, activeWithState);
+  const { isConnected, typingState, presenceState, sendChatMessage, startTyping, stopTyping } =
+    useChatSocket(activeListingState, activeWithState);
 
   const { data: msgs = [], isLoading } = useQuery({
     queryKey: ["messages"],
@@ -67,8 +65,14 @@ function ChatsPage() {
       m.set(`${x.listing_id}|${other}`, { listing: x.listing_id, with: other, last: x });
     }
     if (search.listing && search.with && !m.has(`${search.listing}|${search.with}`))
-      m.set(`${search.listing}|${search.with}`, { listing: search.listing, with: search.with, last: undefined as never });
-    return [...m.values()].sort((a, b) => (b.last?.created_at ?? "9").localeCompare(a.last?.created_at ?? "9"));
+      m.set(`${search.listing}|${search.with}`, {
+        listing: search.listing,
+        with: search.with,
+        last: undefined as never,
+      });
+    return [...m.values()].sort((a, b) =>
+      (b.last?.created_at ?? "9").localeCompare(a.last?.created_at ?? "9"),
+    );
   }, [msgs, user?.id, search.listing, search.with]);
 
   // Names / titles come with the messages; a brand-new thread (no messages yet) is looked up directly.
@@ -90,21 +94,51 @@ function ChatsPage() {
     enabled: newThread,
     queryFn: () => api<ApiListing>(`/listings/${search.listing}`),
   });
-  const name = (id: string) => names.get(id) ?? (id === search.with ? newPerson?.display_name : undefined) ?? "User";
-  const title = (id: string) => titles.get(id) ?? (id === search.listing ? newListing?.title : undefined) ?? "Listing";
+  const name = (id: string) =>
+    names.get(id) ?? (id === search.with ? newPerson?.display_name : undefined) ?? "User";
+  const title = (id: string) =>
+    titles.get(id) ?? (id === search.listing ? newListing?.title : undefined) ?? "Listing";
 
   const open = !!(search.listing && search.with);
   const convo = msgs.filter(
-    (m) => m.listing_id === search.listing && (m.sender_id === search.with || m.recipient_id === search.with),
+    (m) =>
+      m.listing_id === search.listing &&
+      (m.sender_id === search.with || m.recipient_id === search.with),
   );
 
   const activeTypingKey = `${search.listing}|${search.with}`;
   const isPeerTyping = Boolean(typingState[activeTypingKey]);
   const isPeerOnline = Boolean(search.with && presenceState[search.with]);
 
+  // Auto-resolve single parameter searches to immediately open the specific chat thread
+  useEffect(() => {
+    if (search.listing && !search.with && msgs.length > 0) {
+      const match = msgs.find((m) => m.listing_id === search.listing);
+      if (match) {
+        const other = match.sender_id === user?.id ? match.recipient_id : match.sender_id;
+        navigate({
+          to: "/chats",
+          search: { listing: search.listing, with: other },
+          replace: true,
+        });
+      }
+    } else if (search.with && !search.listing && msgs.length > 0) {
+      const match = msgs.find((m) => m.sender_id === search.with || m.recipient_id === search.with);
+      if (match) {
+        navigate({
+          to: "/chats",
+          search: { listing: match.listing_id, with: search.with },
+          replace: true,
+        });
+      }
+    }
+  }, [search.listing, search.with, msgs, user?.id, navigate]);
+
   return (
     <div className="grid h-[calc(100vh-11rem)] gap-4 md:h-[calc(100vh-7rem)] md:grid-cols-[300px_1fr]">
-      <aside className={cn("overflow-y-auto rounded-3xl border bg-card", open && "hidden md:block")}>
+      <aside
+        className={cn("overflow-y-auto rounded-3xl border bg-card", open && "hidden md:block")}
+      >
         <div className="flex items-center justify-between p-4 pb-2">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-extrabold">Chats</h1>
@@ -136,7 +170,9 @@ function ChatsPage() {
             ))}
           </div>
         ) : threads.length === 0 ? (
-          <p className="px-4 text-sm text-muted-foreground">No chats yet. Open a listing and tap “Chat”.</p>
+          <p className="px-4 text-sm text-muted-foreground">
+            No chats yet. Open a listing and tap “Chat”.
+          </p>
         ) : (
           threads.map((t) => {
             const isOnline = Boolean(presenceState[t.with]);
@@ -172,12 +208,18 @@ function ChatsPage() {
           })
         )}
       </aside>
-      <section className={cn("flex min-h-0 flex-col rounded-3xl border bg-card", !open && "hidden md:flex")}>
+      <section
+        className={cn(
+          "flex min-h-0 flex-col rounded-3xl border bg-card",
+          !open && "hidden md:flex",
+        )}
+      >
         {open ? (
           <Thread
             listing={search.listing!}
             other={search.with!}
             peerName={name(search.with!)}
+            peerAvatar={newPerson?.avatar_url || null}
             listingTitle={title(search.listing!)}
             msgs={convo}
             loadingMsgs={isLoading}
@@ -201,6 +243,7 @@ function Thread({
   listing,
   other,
   peerName,
+  peerAvatar,
   listingTitle,
   msgs,
   loadingMsgs,
@@ -215,13 +258,19 @@ function Thread({
   listing: string;
   other: string;
   peerName: string;
+  peerAvatar?: string | null;
   listingTitle: string;
   me: string;
   msgs: ApiMessage[];
   loadingMsgs?: boolean;
   isPeerOnline?: boolean;
   isPeerTyping?: boolean;
-  onSendMessage: (listingId: string, recipientId: string, body: string, clientId: string) => boolean;
+  onSendMessage: (
+    listingId: string,
+    recipientId: string,
+    body: string,
+    clientId: string,
+  ) => boolean;
   onStartTyping: (listingId: string, recipientId: string) => void;
   onStopTyping: (listingId: string, recipientId: string) => void;
   onBack: () => void;
@@ -273,7 +322,10 @@ function Thread({
       created_at: new Date().toISOString(),
     };
 
-    qc.setQueriesData<ApiMessage[]>({ queryKey: ["messages"] }, (old = []) => [...old, optimisticMsg]);
+    qc.setQueriesData<ApiMessage[]>({ queryKey: ["messages"] }, (old = []) => [
+      ...old,
+      optimisticMsg,
+    ]);
 
     // 3. Send via WebSocket (or fallback to REST API)
     try {
@@ -284,13 +336,13 @@ function Thread({
           body: { listing_id: listing, recipient_id: other, body },
         });
         qc.setQueriesData<ApiMessage[]>({ queryKey: ["messages"] }, (old = []) =>
-          old.map((m) => (m.id === clientId ? res : m))
+          old.map((m) => (m.id === clientId ? res : m)),
         );
       }
     } catch (err) {
       // Revert optimistic message if network failed
       qc.setQueriesData<ApiMessage[]>({ queryKey: ["messages"] }, (old = []) =>
-        old.filter((m) => m.id !== clientId)
+        old.filter((m) => m.id !== clientId),
       );
       setText(body);
       toast.error(errorMessage(err));
@@ -300,10 +352,16 @@ function Thread({
   return (
     <>
       <div className="flex items-center justify-between border-b p-3">
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2.5 min-w-0">
           <Button variant="ghost" size="icon" className="md:hidden shrink-0" onClick={onBack}>
             <ArrowLeft />
           </Button>
+          <UserAvatar
+            src={peerAvatar}
+            name={peerName}
+            className="size-9 shrink-0 ring-1 ring-border"
+            previewable={true}
+          />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="font-semibold truncate">{peerName}</span>
@@ -352,7 +410,10 @@ function Thread({
             >
               {m.body}
               <div className="mt-0.5 text-[10px] opacity-70">
-                {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                {new Date(m.created_at).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
               </div>
             </div>
           ))

@@ -1,7 +1,8 @@
 // Thin typed client for the ScrapMart FastAPI backend (backend/app).
 // Handles JWT storage, Authorization header, one-shot token refresh and error normalisation.
 
-const RAW_URL = (import.meta.env["VITE_API_URL"] as string | undefined) ?? "http://localhost:8000/api/v1";
+const RAW_URL =
+  (import.meta.env["VITE_API_URL"] as string | undefined) ?? "http://localhost:8000/api/v1";
 export const API_URL = RAW_URL.replace(/\/+$/, "");
 export const WS_CHAT_URL = API_URL.replace(/^http/, "ws") + "/chat/ws";
 
@@ -18,7 +19,10 @@ export function resolveMediaUrl(url?: string | null): string | null {
     !window.location.hostname.includes("localhost") &&
     !window.location.hostname.includes("127.0.0.1");
 
-  if (isBrowserRemote && (!backendBase || backendBase.includes("localhost") || backendBase.includes("127.0.0.1"))) {
+  if (
+    isBrowserRemote &&
+    (!backendBase || backendBase.includes("localhost") || backendBase.includes("127.0.0.1"))
+  ) {
     backendBase = "https://scrap-application.onrender.com";
   }
 
@@ -38,13 +42,24 @@ export function resolveMediaUrl(url?: string | null): string | null {
     return `${backendBase}${cleanPath}`;
   }
 
+  // If a direct avatars or uploads storage key was stored
+  if (raw.startsWith("/avatars/") || raw.startsWith("avatars/")) {
+    const cleanPath = raw.startsWith("/") ? raw : `/${raw}`;
+    return `${backendBase}/media${cleanPath}`;
+  }
+
+  if (raw.startsWith("/uploads/") || raw.startsWith("uploads/")) {
+    const cleanPath = raw.startsWith("/") ? raw : `/${raw}`;
+    return `${backendBase}${cleanPath}`;
+  }
+
   return raw;
 }
 
-
 // ---------------------------------------------------------------- types ----
 export type Role = "seller" | "collector";
-export type ListingStatus = "posted" | "offer_accepted" | "on_the_way" | "arrived" | "completed" | "cancelled";
+export type ListingStatus =
+  "posted" | "offer_accepted" | "on_the_way" | "arrived" | "completed" | "cancelled";
 export type BidStatus = "pending" | "accepted" | "rejected" | "withdrawn";
 
 export type ApiUser = {
@@ -133,7 +148,14 @@ export type ApiTracker = {
   current_step: number;
   total_steps: number;
   cancelled: boolean;
-  steps: { step: number; status: ListingStatus; label: string; done: boolean; current: boolean; timestamp: string | null }[];
+  steps: {
+    step: number;
+    status: ListingStatus;
+    label: string;
+    done: boolean;
+    current: boolean;
+    timestamp: string | null;
+  }[];
   next_status: ListingStatus | null;
   next_label: string | null;
   can_advance: boolean;
@@ -330,14 +352,19 @@ export class ApiError extends Error {
   }
 }
 
-function parseDetail(body: unknown, fallback: string): { message: string; code?: string | undefined } {
+function parseDetail(
+  body: unknown,
+  fallback: string,
+): { message: string; code?: string | undefined } {
   const detail = (body as { detail?: unknown } | null)?.detail;
   if (typeof detail === "string") return { message: detail };
   if (Array.isArray(detail)) {
     // FastAPI validation errors: [{loc: [...], msg: "..."}]
     const msg = detail
       .map((d) => {
-        const loc = Array.isArray(d?.loc) ? d.loc.filter((x: unknown) => x !== "body").join(".") : "";
+        const loc = Array.isArray(d?.loc)
+          ? d.loc.filter((x: unknown) => x !== "body").join(".")
+          : "";
         return loc ? `${loc}: ${d?.msg}` : String(d?.msg ?? "");
       })
       .filter(Boolean)
@@ -373,7 +400,8 @@ export function setTokens(t: Tokens | null) {
   else window.localStorage.removeItem(STORAGE_KEY);
 }
 
-export const storeTokenResponse = (r: TokenResponse) => setTokens({ access: r.access_token, refresh: r.refresh_token });
+export const storeTokenResponse = (r: TokenResponse) =>
+  setTokens({ access: r.access_token, refresh: r.refresh_token });
 
 /** Fired when the session can no longer be refreshed so the UI can sign the user out. */
 export const SESSION_EXPIRED_EVENT = "scrapmart:session-expired";
@@ -407,7 +435,8 @@ type Opts = { method?: string; body?: unknown; form?: FormData; query?: Query; a
 
 function buildUrl(path: string, query?: Query) {
   const qs = new URLSearchParams();
-  for (const [k, v] of Object.entries(query ?? {})) if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
+  for (const [k, v] of Object.entries(query ?? {}))
+    if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
   const s = qs.toString();
   return `${API_URL}${path}${s ? `?${s}` : ""}`;
 }
@@ -448,7 +477,8 @@ export async function api<T = unknown>(path: string, opts: Opts = {}): Promise<T
   return data as T;
 }
 
-export const errorMessage = (e: unknown) => (e instanceof Error ? e.message : "Something went wrong");
+export const errorMessage = (e: unknown) =>
+  e instanceof Error ? e.message : "Something went wrong";
 
 import { compressImage } from "@/lib/image";
 
@@ -459,7 +489,10 @@ export async function uploadImages(files: File[]): Promise<string[]> {
   const compressed = await Promise.all(files.map((f) => compressImage(f)));
   const form = new FormData();
   compressed.forEach((file) => form.append("files", file));
-  const out = await api<{ url: string; key: string }[]>("/uploads/images", { method: "POST", form });
+  const out = await api<{ url: string; key: string }[]>("/uploads/images", {
+    method: "POST",
+    form,
+  });
   return out.map((o) => o.url).filter(Boolean);
 }
 

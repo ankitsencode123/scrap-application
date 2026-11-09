@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { Camera, Loader2, Smartphone, Bell, Share2, Sparkles, Trash2 } from "lucide-react";
+import { Camera, Loader2, Smartphone, Bell, Share2, Sparkles, Trash2, ZoomIn } from "lucide-react";
 import { toast } from "sonner";
 import {
   api,
   errorMessage,
   uploadAvatar,
+  resolveMediaUrl,
   type ApiReview,
   type ApiStats,
   type ApiUser,
@@ -21,6 +22,7 @@ import { Stars } from "@/components/Stars";
 import { UserAvatar } from "@/components/UserAvatar";
 import { formatINR } from "@/lib/scrap";
 import { PwaInstallButton } from "@/components/pwa/PwaInstallPrompt";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   head: () => ({
@@ -44,6 +46,7 @@ function ProfilePage() {
   const [city, setCity] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [notificationStatus, setNotificationStatus] = useState<string>("default");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -128,12 +131,23 @@ function ProfilePage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-3xl border bg-card p-5">
         <div className="flex items-center gap-4 min-w-0">
           <div className="relative shrink-0">
-            <UserAvatar
-              src={profile?.avatar_url}
-              name={profile?.display_name || user?.email}
-              className="size-16"
-              textClassName="text-2xl"
-            />
+            <button
+              type="button"
+              onClick={() => setShowPhotoModal(true)}
+              aria-label="View profile photo"
+              title="Click to view profile picture"
+              className="group relative block rounded-full focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-transform active:scale-95 cursor-pointer"
+            >
+              <UserAvatar
+                src={profile?.avatar_url}
+                name={profile?.display_name || user?.email}
+                className="size-16 ring-2 ring-primary/20"
+                textClassName="text-2xl"
+              />
+              <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/35 opacity-0 group-hover:opacity-100 transition-opacity">
+                <ZoomIn className="size-5 text-white drop-shadow" />
+              </span>
+            </button>
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
@@ -325,6 +339,58 @@ function ProfilePage() {
       <Button variant="outline" className="w-full" onClick={signOut}>
         Sign out
       </Button>
+
+      {/* Full-size Profile Picture Display Modal */}
+      <Dialog open={showPhotoModal} onOpenChange={setShowPhotoModal}>
+        <DialogContent className="max-w-xs sm:max-w-sm rounded-3xl p-6 text-center border bg-card shadow-lift">
+          <DialogHeader>
+            <DialogTitle className="text-center font-display text-lg font-bold">
+              Profile Photo
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="my-4 flex flex-col items-center justify-center">
+            {profile?.avatar_url ? (
+              <img
+                src={resolveMediaUrl(profile.avatar_url) || ""}
+                alt={profile.display_name || "Profile"}
+                className="size-60 sm:size-64 rounded-3xl object-cover border-2 border-primary/20 shadow-lift"
+              />
+            ) : (
+              <div className="flex size-60 sm:size-64 items-center justify-center rounded-3xl bg-primary text-primary-foreground font-display text-7xl font-bold shadow-lift">
+                {(profile?.display_name || user?.email || "U").trim().slice(0, 1).toUpperCase()}
+              </div>
+            )}
+            <p className="mt-3 font-semibold text-base text-foreground">
+              {profile?.display_name || "User"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              <span className="capitalize">{profile?.role}</span> · {user?.email}
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Button
+              onClick={() => {
+                setShowPhotoModal(false);
+                fileInputRef.current?.click();
+              }}
+              disabled={uploadingAvatar}
+              className="w-full gap-2 rounded-xl"
+            >
+              <Camera className="size-4" />
+              Change Photo
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowPhotoModal(false)}
+              className="w-full rounded-xl"
+            >
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

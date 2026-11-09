@@ -63,7 +63,9 @@ import {
 } from "@/lib/api";
 
 const css = (v: string) =>
-  typeof window !== "undefined" ? getComputedStyle(document.documentElement).getPropertyValue(v).trim() : "";
+  typeof window !== "undefined"
+    ? getComputedStyle(document.documentElement).getPropertyValue(v).trim()
+    : "";
 
 const TILES = {
   normal: { url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", attr: "© OpenStreetMap" },
@@ -78,7 +80,12 @@ type TileKey = keyof typeof TILES;
 type Overlay = "heat" | "density" | "nearby" | "centres";
 
 const divIcon = (html: string, size: number, anchor?: [number, number]) =>
-  L.divIcon({ html, className: "", iconSize: [size, size], iconAnchor: anchor ?? [size / 2, size / 2] });
+  L.divIcon({
+    html,
+    className: "",
+    iconSize: [size, size],
+    iconAnchor: anchor ?? [size / 2, size / 2],
+  });
 
 const SPEED_KMH = 24;
 
@@ -181,7 +188,8 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
 
   const { data: trackingData } = useQuery({
     queryKey: ["map-tracking", activeListing?.id],
-    queryFn: () => api<TrackingOut>(`/map/tracking/${activeListing!.id}`, { query: { include_route: true } }),
+    queryFn: () =>
+      api<TrackingOut>(`/map/tracking/${activeListing!.id}`, { query: { include_route: true } }),
     enabled: isTrackingActive,
     refetchInterval: 5000,
   });
@@ -226,7 +234,8 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
   const collectorAssigned = useMemo(() => {
     if (role !== "collector") return [];
     return myListings.filter(
-      (l) => l.is_assigned_collector && ["offer_accepted", "on_the_way", "arrived"].includes(l.status),
+      (l) =>
+        l.is_assigned_collector && ["offer_accepted", "on_the_way", "arrived"].includes(l.status),
     );
   }, [role, myListings]);
 
@@ -261,18 +270,29 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
     () => collectorStops.filter((s) => s.done).length,
     [collectorStops],
   );
-  const collectorCapacityUsedPct = Math.min(100, Math.round((collectorTotalKg / VEHICLE_MAX_KG) * 100));
+  const collectorCapacityUsedPct = Math.min(
+    100,
+    Math.round((collectorTotalKg / VEHICLE_MAX_KG) * 100),
+  );
 
   // Real scrap category breakdown in the zone
   const realCategoryCounts = useMemo(() => {
-    const counts: Record<string, number> = { metals: 0, plastic_bottles: 0, paper_cardboard: 0, ewaste_appliances: 0 };
+    const counts: Record<string, number> = {
+      metals: 0,
+      plastic_bottles: 0,
+      paper_cardboard: 0,
+      ewaste_appliances: 0,
+    };
     const items = mapListingsData?.items ?? [];
     items.forEach((item) => {
       const cat = item.category.toLowerCase();
       if (cat.includes("metal")) counts["metals"] = (counts["metals"] || 0) + 1;
-      else if (cat.includes("plastic")) counts["plastic_bottles"] = (counts["plastic_bottles"] || 0) + 1;
-      else if (cat.includes("paper")) counts["paper_cardboard"] = (counts["paper_cardboard"] || 0) + 1;
-      else if (cat.includes("ewaste") || cat.includes("appliance")) counts["ewaste_appliances"] = (counts["ewaste_appliances"] || 0) + 1;
+      else if (cat.includes("plastic"))
+        counts["plastic_bottles"] = (counts["plastic_bottles"] || 0) + 1;
+      else if (cat.includes("paper"))
+        counts["paper_cardboard"] = (counts["paper_cardboard"] || 0) + 1;
+      else if (cat.includes("ewaste") || cat.includes("appliance"))
+        counts["ewaste_appliances"] = (counts["ewaste_appliances"] || 0) + 1;
     });
     return counts;
   }, [mapListingsData?.items]);
@@ -329,7 +349,9 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
           body: { client_error: { code: 2, message: "Geolocation unavailable" } },
         });
         setUserPos([out.lat, out.lng]);
-      } catch {}
+      } catch {
+        // Fallback geolocation error ignored
+      }
     }
   }, [role]);
 
@@ -371,9 +393,15 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
   useEffect(() => {
     if (!mapEl.current || map.current) return;
 
-    const m = L.map(mapEl.current, { zoomControl: false, attributionControl: true }).setView(userPos, 14);
+    const m = L.map(mapEl.current, { zoomControl: false, attributionControl: true }).setView(
+      userPos,
+      14,
+    );
     map.current = m;
-    tile.current = L.tileLayer(TILES.normal.url, { attribution: TILES.normal.attr, maxZoom: 19 }).addTo(m);
+    tile.current = L.tileLayer(TILES.normal.url, {
+      attribution: TILES.normal.attr,
+      maxZoom: 19,
+    }).addTo(m);
 
     userLayer.current = L.layerGroup().addTo(m);
     stopsLayer.current = L.layerGroup().addTo(m);
@@ -418,16 +446,31 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
     const C_info = css("--info") || "#3b82f6";
     const C_success = css("--success") || "#10b981";
 
-    L.circle(userPos, { radius: 100, color: C_info, weight: 1, fillColor: C_info, fillOpacity: 0.12 }).addTo(ul);
+    L.circle(userPos, {
+      radius: 100,
+      color: C_info,
+      weight: 1,
+      fillColor: C_info,
+      fillOpacity: 0.12,
+    }).addTo(ul);
     L.marker(userPos, {
-      icon: divIcon('<div class="user-loc"><div class="ring"></div><div class="dot"></div></div>', 18),
+      icon: divIcon(
+        '<div class="user-loc"><div class="ring"></div><div class="dot"></div></div>',
+        18,
+      ),
       zIndexOffset: 900,
     })
       .bindPopup(`<b>You are here</b><br/>${user?.display_name ?? "Current User"}`, POPUP_OPTS)
       .addTo(ul);
 
     // Subtle proximity geofence
-    L.circle(userPos, { radius: 300, color: C_success, weight: 1.5, dashArray: "5 5", fill: false }).addTo(ul);
+    L.circle(userPos, {
+      radius: 300,
+      color: C_success,
+      weight: 1.5,
+      dashArray: "5 5",
+      fill: false,
+    }).addTo(ul);
   }, [userPos, user?.display_name]);
 
   // --------------------------------------------------------------------------
@@ -452,8 +495,13 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
         interactive: false,
       }).addTo(cg);
 
-      L.marker(c.pos, { icon: divIcon(`<div class="chip-marker">${ICON[c.kind] ?? "🏭"}</div>`, 30) })
-        .bindPopup(`<b>${c.name}</b><br/>Radius ${(c.radius / 1000).toFixed(1)} km · ${(d / 1000).toFixed(1)} km from your location`, POPUP_OPTS)
+      L.marker(c.pos, {
+        icon: divIcon(`<div class="chip-marker">${ICON[c.kind] ?? "🏭"}</div>`, 30),
+      })
+        .bindPopup(
+          `<b>${c.name}</b><br/>Radius ${(c.radius / 1000).toFixed(1)} km · ${(d / 1000).toFixed(1)} km from your location`,
+          POPUP_OPTS,
+        )
         .addTo(cg);
     });
   }, [centres, userPos]);
@@ -474,7 +522,8 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
 
     const cells = heatmapData?.cells ?? [];
     cells.forEach((cell) => {
-      const col = cell.intensity > 0.65 ? C.destructive : cell.intensity > 0.35 ? C.warning : C.success;
+      const col =
+        cell.intensity > 0.65 ? C.destructive : cell.intensity > 0.35 ? C.warning : C.success;
       L.circle([cell.lat, cell.lng], {
         radius: 120 + cell.intensity * 220,
         stroke: false,
@@ -494,12 +543,16 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
     if (role === "seller") {
       // Show real online collectors nearby
       nearbyCollectors.forEach((c) => {
+        const chatUrl = `/chats?with=${c.id}${activeListing?.id ? `&listing=${activeListing.id}` : ""}`;
         L.marker([c.lat, c.lng], {
-          icon: divIcon('<div class="chip-marker border-2 border-emerald-500 shadow-sm">🛺</div>', 32),
+          icon: divIcon(
+            '<div class="chip-marker border-2 border-emerald-500 shadow-sm">🛺</div>',
+            32,
+          ),
         })
           .bindPopup(
-            `<b>${c.display_name}</b><br/>★ ${c.rating_avg.toFixed(1)} (${c.rating_count} reviews)<br/><small>${c.distance_km} km away · Online now</small>`,
-            POPUP_OPTS
+            `<b>${c.display_name}</b><br/>★ ${c.rating_avg.toFixed(1)} (${c.rating_count} reviews)<br/><small>${c.distance_km} km away · Online now</small><div style="margin-top:6px;"><a href="${chatUrl}" style="display:inline-block;padding:4px 10px;background:#2f5a43;color:#ffffff;border-radius:8px;font-size:11px;font-weight:600;text-decoration:none;">💬 Chat with ${c.display_name}</a></div>`,
+            POPUP_OPTS,
           )
           .addTo(ng);
       });
@@ -513,7 +566,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
         })
           .bindPopup(
             `<b>${item.title}</b><br/>${meta.emoji} ${item.category_label} · ${item.weight_kg} kg<br/>Expected: ₹${item.expected_price.toLocaleString("en-IN")}<br/><small>${item.distance_km ? `${item.distance_km} km away` : ""}</small>`,
-            POPUP_OPTS
+            POPUP_OPTS,
           )
           .addTo(ng);
       });
@@ -551,7 +604,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
         })
           .bindPopup(
             `<b>Your Scrap Pickup</b><br/>${meta.emoji} ${meta.label} · ${activeListing.weight_kg ?? 0} kg<br/>Expected Payout: ₹${((activeListing.final_price ?? activeListing.expected_price) || 0).toLocaleString("en-IN")}`,
-            POPUP_OPTS
+            POPUP_OPTS,
           )
           .addTo(sl);
 
@@ -572,7 +625,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
           })
             .bindPopup(
               `<b>Your Scrap Listing (Awaiting Bids)</b><br/>${meta.emoji} ${meta.label} · ${activeListing.weight_kg ?? 0} kg<br/>Expected Payout: ₹${((activeListing.final_price ?? activeListing.expected_price) || 0).toLocaleString("en-IN")}`,
-              POPUP_OPTS
+              POPUP_OPTS,
             )
             .addTo(sl);
 
@@ -593,7 +646,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
           })
             .bindPopup(
               `<b>Customer Pickup ${i + 1} · ${stop.label}</b><br/>${meta.emoji} ${meta.label} · ${stop.kg} kg<br/>₹${stop.expected_price.toLocaleString("en-IN")}`,
-              POPUP_OPTS
+              POPUP_OPTS,
             )
             .addTo(sl);
           waypoints.push(stop.pos);
@@ -637,7 +690,15 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
       }
       setLoading(false);
     }
-  }, [role, activeListing, isTrackingActive, userPos, destination, collectorStops, trackingData?.collector]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [
+    role,
+    activeListing,
+    isTrackingActive,
+    userPos,
+    destination,
+    collectorStops,
+    trackingData?.collector,
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --------------------------------------------------------------------------
   // 9. DRAW ACTIVE ROUTES & TRAFFIC
@@ -690,9 +751,19 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
         .addTo(rl);
     });
 
-    const glow = L.polyline([], { color: C.info, weight: 10, opacity: 0.22, className: "route-glow" }).addTo(rl);
+    const glow = L.polyline([], {
+      color: C.info,
+      weight: 10,
+      opacity: 0.22,
+      className: "route-glow",
+    }).addTo(rl);
     const main = L.polyline([], { color: C.info, weight: 5, opacity: 1 }).addTo(rl);
-    const flow = L.polyline([], { color: css("--card") || "#ffffff", weight: 2, opacity: 0.9, className: "route-flow" }).addTo(rl);
+    const flow = L.polyline([], {
+      color: css("--card") || "#ffffff",
+      weight: 2,
+      opacity: 0.9,
+      className: "route-flow",
+    }).addTo(rl);
     doneLine.current = L.polyline([], { color: C.success, weight: 6, opacity: 0.95 }).addTo(rl);
 
     let i = 0;
@@ -707,15 +778,24 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
         clearInterval(t);
         // Dynamic traffic indicators
         const n = path.length;
-        [[0.15, 0.22, C.warning], [0.45, 0.52, C.destructive], [0.72, 0.78, C.warning]].forEach(([a, b, col]) =>
+        [
+          [0.15, 0.22, C.warning],
+          [0.45, 0.52, C.destructive],
+          [0.72, 0.78, C.warning],
+        ].forEach(([a, b, col]) =>
           L.polyline(path.slice(Math.floor(n * (a as number)), Math.floor(n * (b as number))), {
             color: col as string,
             weight: 5,
             opacity: 0.95,
           })
-            .bindTooltip((col as string) === C.destructive ? "Heavy traffic segment" : "Moderate traffic segment", {
-              sticky: true,
-            })
+            .bindTooltip(
+              (col as string) === C.destructive
+                ? "Heavy traffic segment"
+                : "Moderate traffic segment",
+              {
+                sticky: true,
+              },
+            )
             .addTo(rl),
         );
         flow.bringToFront();
@@ -728,18 +808,22 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
       ? ([trackingData.collector.lat, trackingData.collector.lng] as LatLng)
       : path[0]!;
 
+    const vehiclePopupHtml = `<b>${role === "seller" ? (activeListing?.collector?.display_name ?? "Scrap Collector") : (user?.display_name ?? "Collection Vehicle")}</b><br/>${activeListing?.status === "on_the_way" ? "Live En Route" : "Collector Assigned"}${
+      role === "seller" && activeListing?.collector?.id
+        ? `<div style="margin-top:8px;"><a href="/chats?listing=${activeListing.id}&with=${activeListing.collector.id}" style="display:inline-block;padding:5px 12px;background:#2f5a43;color:#ffffff;border-radius:10px;font-size:12px;font-weight:600;text-decoration:none;">💬 Chat with Collector</a></div>`
+        : ""
+    }`;
+
     if (!vehicle.current) {
       vehicle.current = L.marker(startPos, {
         icon: divIcon('<div class="vehicle">🚚</div>', 44),
         zIndexOffset: 1000,
       })
-        .bindPopup(
-          `<b>${role === "seller" ? (activeListing?.collector?.display_name ?? "Scrap Collector") : (user?.display_name ?? "Collection Vehicle")}</b><br/>${activeListing?.status === "on_the_way" ? "Live En Route" : "Collector Assigned"}`,
-          POPUP_OPTS
-        )
+        .bindPopup(vehiclePopupHtml, POPUP_OPTS)
         .addTo(m);
     } else {
       vehicle.current.setLatLng(startPos);
+      vehicle.current.setPopupContent(vehiclePopupHtml);
     }
 
     m.fitBounds(L.latLngBounds(path), {
@@ -848,7 +932,10 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
   const realExpectedPrice = (activeListing?.final_price ?? activeListing?.expected_price) || 0;
 
   return (
-    <div ref={wrapEl} className="relative h-full w-full overflow-hidden rounded-3xl border border-border bg-muted">
+    <div
+      ref={wrapEl}
+      className="relative h-full w-full overflow-hidden rounded-3xl border border-border bg-muted"
+    >
       <div ref={mapEl} className="absolute inset-0 z-0" />
 
       {/* Loading state */}
@@ -891,7 +978,8 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
             <span className="text-[10px] text-muted-foreground leading-tight">
               {user?.display_name ? (
                 <>
-                  Logged in as <span className="font-semibold text-foreground">{user.display_name}</span> (
+                  Logged in as{" "}
+                  <span className="font-semibold text-foreground">{user.display_name}</span> (
                   {role === "collector" ? "Collector" : "Seller"})
                 </>
               ) : (
@@ -901,7 +989,10 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
           </div>
         </div>
 
-        <form onSubmit={search} className="glass-panel flex items-center gap-2 rounded-2xl px-3 py-2">
+        <form
+          onSubmit={search}
+          className="glass-panel flex items-center gap-2 rounded-2xl px-3 py-2"
+        >
           <Search className="h-4 w-4 text-muted-foreground" />
           <input
             value={query}
@@ -980,10 +1071,17 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
         <RailBtn label="Fullscreen" className="hidden md:grid" onClick={toggleFullscreen}>
           {fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
         </RailBtn>
-        <RailBtn label="Help" className="hidden md:grid" onClick={() => toast("ScrapPe Support: Call 1800-SCRAP-CYCLE or use Chat")}>
+        <RailBtn
+          label="Help"
+          className="hidden md:grid"
+          onClick={() => toast("ScrapPe Support: Call 1800-SCRAP-CYCLE or use Chat")}
+        >
           <HelpCircle className="h-4 w-4" />
         </RailBtn>
-        <div className="glass-panel hidden md:grid h-10 w-10 place-items-center rounded-full" title="Vehicle heading">
+        <div
+          className="glass-panel hidden md:grid h-10 w-10 place-items-center rounded-full"
+          title="Vehicle heading"
+        >
           <Compass
             className="h-5 w-5 text-primary transition-transform duration-500"
             style={{ transform: `rotate(${bearing}deg)` }}
@@ -993,7 +1091,9 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
         {notifOpen && (
           <Popover title="Real-Time Updates" onClose={() => setNotifOpen(false)}>
             {notifs.length === 0 ? (
-              <p className="py-4 text-center text-xs text-muted-foreground">No recent notifications</p>
+              <p className="py-4 text-center text-xs text-muted-foreground">
+                No recent notifications
+              </p>
             ) : (
               notifs.map((n, i) => (
                 <p key={i} className="border-b border-border py-2 text-sm last:border-0">
@@ -1012,7 +1112,9 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
                   key={k}
                   onClick={() => setTileKey(k)}
                   className={`rounded-xl border px-2 py-2 text-xs font-semibold capitalize transition ${
-                    tileKey === k ? "border-primary bg-secondary text-primary" : "border-border hover:bg-muted"
+                    tileKey === k
+                      ? "border-primary bg-secondary text-primary"
+                      : "border-border hover:bg-muted"
                   }`}
                 >
                   {k}
@@ -1023,7 +1125,11 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
               {[
                 ["heat", "Scrap Demand Heatmap", Flame],
                 ["density", "Category Density", Shapes],
-                ["nearby", role === "seller" ? "Online Collectors Nearby" : "Marketplace Pickups", Users],
+                [
+                  "nearby",
+                  role === "seller" ? "Online Collectors Nearby" : "Marketplace Pickups",
+                  Users,
+                ],
                 ["centres", "Recycling Plants & Hubs", Factory],
               ].map(([k, l, I]) => (
                 <label
@@ -1031,14 +1137,16 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
                   className="flex cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 text-sm hover:bg-muted"
                 >
                   <span className="flex items-center gap-2">
-                    {/* @ts-ignore */}
+                    {/* @ts-expect-error dynamic lucide icon component */}
                     <I className="h-4 w-4 text-primary" />
                     {l}
                   </span>
                   <input
                     type="checkbox"
                     checked={overlays[k as Overlay]}
-                    onChange={() => setOverlays((o) => ({ ...o, [k as Overlay]: !o[k as Overlay] }))}
+                    onChange={() =>
+                      setOverlays((o) => ({ ...o, [k as Overlay]: !o[k as Overlay] }))
+                    }
                     className="accent-primary"
                   />
                 </label>
@@ -1050,18 +1158,32 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
         {legendOpen && (
           <Popover title="Map Legend" onClose={() => setLegendOpen(false)}>
             <div className="space-y-1.5 text-sm">
-              <Leg icon={<span className="h-3 w-3 rounded-full bg-info ring-4 ring-info/30" />} l="Your verified location" />
+              <Leg
+                icon={<span className="h-3 w-3 rounded-full bg-info ring-4 ring-info/30" />}
+                l="Your verified location"
+              />
               <Leg icon={<span>🚚</span>} l="Assigned collection vehicle" />
-              <Leg icon={<span className="h-3 w-3 rounded-full bg-success" />} l="Real pickup stop" />
-              <Leg icon={<span className="h-3 w-3 rounded-full bg-destructive" />} l="Recycling plant destination" />
+              <Leg
+                icon={<span className="h-3 w-3 rounded-full bg-success" />}
+                l="Real pickup stop"
+              />
+              <Leg
+                icon={<span className="h-3 w-3 rounded-full bg-destructive" />}
+                l="Recycling plant destination"
+              />
               <Leg icon={<span>🏭</span>} l="Material recovery facility" />
               <Leg icon={<span>♻️</span>} l="Collection & sorting depot" />
               <Leg icon={<span>🛺</span>} l="Online collector nearby" />
               <div className="my-2 h-px bg-border" />
-              <Leg icon={<span className="h-1 w-5 rounded bg-info" />} l="Active road route (OSRM)" />
+              <Leg
+                icon={<span className="h-1 w-5 rounded bg-info" />}
+                l="Active road route (OSRM)"
+              />
               <Leg icon={<span className="h-1 w-5 rounded bg-success" />} l="Completed GPS trail" />
               <Leg
-                icon={<span className="h-1 w-5 rounded border-t-2 border-dashed border-muted-foreground" />}
+                icon={
+                  <span className="h-1 w-5 rounded border-t-2 border-dashed border-muted-foreground" />
+                }
                 l="Alternate road route"
               />
             </div>
@@ -1071,13 +1193,34 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
 
       {/* Zoom / Recenter stack */}
       <div className="absolute bottom-6 right-4 z-[1000] hidden flex-col gap-2 lg:right-[25rem] lg:flex">
-        <ZoomStack map={map} follow={follow} setFollow={setFollow} vehiclePos={trackingData?.collector ? [trackingData.collector.lat, trackingData.collector.lng] : path[0]} userPos={userPos} />
+        <ZoomStack
+          map={map}
+          follow={follow}
+          setFollow={setFollow}
+          vehiclePos={
+            trackingData?.collector
+              ? [trackingData.collector.lat, trackingData.collector.lng]
+              : path[0]
+          }
+          userPos={userPos}
+        />
       </div>
       <div
         className="absolute right-3 z-[1000] flex flex-col gap-2 lg:hidden"
         style={{ bottom: sheetOpen ? "64%" : "8.5rem" }}
       >
-        <ZoomStack map={map} follow={follow} setFollow={setFollow} vehiclePos={trackingData?.collector ? [trackingData.collector.lat, trackingData.collector.lng] : path[0]} userPos={userPos} isMobile={true} />
+        <ZoomStack
+          map={map}
+          follow={follow}
+          setFollow={setFollow}
+          vehiclePos={
+            trackingData?.collector
+              ? [trackingData.collector.lat, trackingData.collector.lng]
+              : path[0]
+          }
+          userPos={userPos}
+          isMobile={true}
+        />
       </div>
 
       {/* Overlay quick toggles (desktop) */}
@@ -1092,10 +1235,12 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
             key={k as string}
             onClick={() => setOverlays((o) => ({ ...o, [k as Overlay]: !o[k as Overlay] }))}
             className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold shadow-float transition ${
-              overlays[k as Overlay] ? "bg-primary text-primary-foreground" : "glass-panel text-foreground"
+              overlays[k as Overlay]
+                ? "bg-primary text-primary-foreground"
+                : "glass-panel text-foreground"
             }`}
           >
-            {/* @ts-ignore */}
+            {/* @ts-expect-error dynamic lucide icon component */}
             <I className="h-3.5 w-3.5" /> {l}
           </button>
         ))}
@@ -1143,7 +1288,9 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
                 ? isTrackingActive
                   ? activeListing?.status === "offer_accepted"
                     ? "Collector Assigned"
-                    : finished ? "Completed" : `${etaMin} min ETA`
+                    : finished
+                      ? "Completed"
+                      : `${etaMin} min ETA`
                   : activeListing?.status === "posted"
                     ? "Listing Posted"
                     : "No Active Pickup"
@@ -1210,7 +1357,26 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
                         </p>
                       </div>
                       <button
-                        onClick={() => navigate({ to: "/chats" })}
+                        onClick={() => {
+                          if (activeListing && activeListing.collector?.id) {
+                            navigate({
+                              to: "/chats",
+                              search: {
+                                listing: activeListing.id,
+                                with: activeListing.collector.id,
+                              },
+                            });
+                          } else if (activeListing) {
+                            navigate({
+                              to: "/chats",
+                              search: {
+                                listing: activeListing.id,
+                              },
+                            });
+                          } else {
+                            navigate({ to: "/chats" });
+                          }
+                        }}
                         className="grid h-9 w-9 place-items-center rounded-full bg-card text-primary shadow-sm hover:scale-105 transition"
                         aria-label="Chat"
                         title="Chat with collector"
@@ -1220,7 +1386,11 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
                       {activeListing.collector.phone && (
                         <a
                           href={`tel:${activeListing.collector.phone}`}
-                          onClick={() => toast.info(`Connecting call to collector (${activeListing.collector?.phone})`)}
+                          onClick={() =>
+                            toast.info(
+                              `Connecting call to collector (${activeListing.collector?.phone})`,
+                            )
+                          }
                           className="grid h-9 w-9 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm hover:scale-105 transition"
                           aria-label="Call"
                           title="Call collector"
@@ -1236,7 +1406,9 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
                         <Clock className="size-5" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-sm text-foreground">Awaiting Collector Offers</p>
+                        <p className="font-semibold text-sm text-foreground">
+                          Awaiting Collector Offers
+                        </p>
                         <p className="text-xs text-muted-foreground">
                           {nearbyCollectors.length > 0
                             ? `${nearbyCollectors.length} verified collectors nearby have been alerted.`
@@ -1258,7 +1430,10 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-sm">
-                      <Info k="Category" v={`${activeMeta.emoji} ${activeListing.category_label || activeMeta.label}`} />
+                      <Info
+                        k="Category"
+                        v={`${activeMeta.emoji} ${activeListing.category_label || activeMeta.label}`}
+                      />
                       <Info k="Weight" v={`${activeListing.weight_kg} kg`} />
                       <Info
                         k="Calculated Payout"
@@ -1357,19 +1532,29 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
                     </div>
                     <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                       <Stat v={collectorCompletedStops} l="Completed" />
-                      <Stat v={Math.max(0, collectorStops.length - collectorCompletedStops)} l="Pending" />
-                      <Stat v={`${collectorTotalKg} kg`} l={`${collectorCapacityUsedPct}% of ${VEHICLE_MAX_KG}kg`} />
+                      <Stat
+                        v={Math.max(0, collectorStops.length - collectorCompletedStops)}
+                        l="Pending"
+                      />
+                      <Stat
+                        v={`${collectorTotalKg} kg`}
+                        l={`${collectorCapacityUsedPct}% of ${VEHICLE_MAX_KG}kg`}
+                      />
                     </div>
 
                     {/* Customer stops checklist */}
                     <ul className="mt-3 space-y-1.5 text-xs">
                       {collectorStops.map((p, i) => {
                         const meta = getScrapMeta(p.category);
+                        const assignedItem = collectorAssigned.find((a) => a.id === p.id);
+                        const sellerId = assignedItem?.seller?.id;
                         return (
                           <li key={p.id} className="flex items-center gap-2">
                             <span
                               className={`grid h-5 w-5 place-items-center rounded-full text-[10px] font-bold ${
-                                p.done ? "bg-success text-card" : "bg-primary text-primary-foreground"
+                                p.done
+                                  ? "bg-success text-card"
+                                  : "bg-primary text-primary-foreground"
                               }`}
                             >
                               {i + 1}
@@ -1378,6 +1563,21 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
                             <span className="text-muted-foreground font-semibold">
                               {meta.emoji} {p.kg} kg · ₹{p.expected_price.toLocaleString("en-IN")}
                             </span>
+                            {sellerId && (
+                              <button
+                                onClick={() =>
+                                  navigate({
+                                    to: "/chats",
+                                    search: { listing: p.id, with: sellerId },
+                                  })
+                                }
+                                className="grid h-6 w-6 place-items-center rounded-full bg-secondary text-primary hover:bg-primary hover:text-primary-foreground transition shadow-xs shrink-0"
+                                title="Chat with customer"
+                                aria-label="Chat with customer"
+                              >
+                                <MessageCircle className="h-3 w-3" />
+                              </button>
+                            )}
                           </li>
                         );
                       })}
@@ -1395,12 +1595,17 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
                           key={i}
                           onClick={() => setActiveRoute(i)}
                           className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs transition ${
-                            i === activeRoute ? "bg-info/10 font-semibold text-info" : "hover:bg-muted"
+                            i === activeRoute
+                              ? "bg-info/10 font-semibold text-info"
+                              : "hover:bg-muted"
                           }`}
                         >
-                          <span>{i === 0 ? "Fastest road corridor" : `Alternate highway ${i}`}</span>
                           <span>
-                            {pathLength(r).toFixed(1)} km · {Math.round((pathLength(r) / SPEED_KMH) * 60)} min
+                            {i === 0 ? "Fastest road corridor" : `Alternate highway ${i}`}
+                          </span>
+                          <span>
+                            {pathLength(r).toFixed(1)} km ·{" "}
+                            {Math.round((pathLength(r) / SPEED_KMH) * 60)} min
                           </span>
                         </button>
                       ))}
@@ -1422,7 +1627,8 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
                     </div>
                     <h4 className="font-bold text-sm">No Active Pickup Orders</h4>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      When an actual customer accepts your offer, live GPS navigation, customer doorstep routing, and ETA will appear here.
+                      When an actual customer accepts your offer, live GPS navigation, customer
+                      doorstep routing, and ETA will appear here.
                     </p>
                     <Button
                       onClick={() => navigate({ to: "/home" })}
@@ -1456,8 +1662,11 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
                               <div className="min-w-0 flex-1">
                                 <p className="font-semibold text-xs truncate">{item.title}</p>
                                 <p className="text-[10px] text-muted-foreground">
-                                  {meta.emoji} {item.category_label || meta.label} · {item.weight_kg} kg
-                                  {item.distance_km != null ? ` · ${item.distance_km.toFixed(1)} km away` : ""}
+                                  {meta.emoji} {item.category_label || meta.label} ·{" "}
+                                  {item.weight_kg} kg
+                                  {item.distance_km != null
+                                    ? ` · ${item.distance_km.toFixed(1)} km away`
+                                    : ""}
                                 </p>
                               </div>
                               <span className="text-xs font-extrabold text-primary ml-2 shrink-0">
@@ -1498,7 +1707,9 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
                           }}
                         />
                       </div>
-                      <span className="w-8 text-right font-semibold text-muted-foreground">{count}</span>
+                      <span className="w-8 text-right font-semibold text-muted-foreground">
+                        {count}
+                      </span>
                     </div>
                   );
                 })}
@@ -1510,7 +1721,9 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
             <div className="rounded-2xl bg-success/15 p-4 text-center">
               <p className="text-2xl">🎉</p>
               <p className="font-display font-bold">Pickup & Delivery Completed</p>
-              <p className="text-xs text-muted-foreground">Scrap delivered to {destination.name}.</p>
+              <p className="text-xs text-muted-foreground">
+                Scrap delivered to {destination.name}.
+              </p>
             </div>
           )}
         </div>
