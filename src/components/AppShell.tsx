@@ -29,9 +29,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen pb-24 md:pb-0">
-      <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur pt-safe">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
-          <Link to="/home"><Logo /></Link>
+          <Link to="/home">
+            <Logo />
+          </Link>
           <nav className="hidden items-center gap-1.5 md:flex">
             {items.map((n) => (
               <Link

@@ -14,6 +14,9 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AuthProvider } from "@/hooks/use-auth";
 import { Toaster } from "@/components/ui/sonner";
+import { PwaInstallPrompt } from "@/components/pwa/PwaInstallPrompt";
+import { OfflineIndicator } from "@/components/pwa/OfflineIndicator";
+import { PwaUpdateToast } from "@/components/pwa/PwaUpdateToast";
 
 function NotFoundComponent() {
   return (
@@ -79,21 +82,48 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      {
+        name: "viewport",
+        content:
+          "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no",
+      },
       { title: "scrappe — Sell your scrap from home" },
-      { name: "description", content: "Snap your scrap, get offers from nearby collectors, and have it picked up from your door." },
+      {
+        name: "description",
+        content:
+          "Snap your scrap, get instant offers from nearby verified collectors, and have it picked up from your door.",
+      },
       { property: "og:title", content: "scrappe — Sell your scrap from home" },
-      { property: "og:description", content: "Snap your scrap, get offers from nearby collectors, and have it picked up from your door." },
+      {
+        property: "og:description",
+        content:
+          "Snap your scrap, get instant offers from nearby verified collectors, and have it picked up from your door.",
+      },
       { property: "og:type", content: "website" },
+      { property: "og:image", content: "/icons/icon-512.png" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:image", content: "/icons/icon-512.png" },
       { name: "theme-color", content: "#2f5a43" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "apple-mobile-web-app-title", content: "Scrappe" },
+      { name: "application-name", content: "Scrappe" },
+      { name: "format-detection", content: "telephone=no" },
+      { name: "msapplication-TileColor", content: "#2f5a43" },
+      { name: "msapplication-tap-highlight", content: "no" },
     ],
     links: [
       {
         rel: "stylesheet",
         href: appCss,
       },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+      { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+      { rel: "icon", href: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { rel: "icon", href: "/favicon.ico", sizes: "any" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png", sizes: "180x180" },
+      { rel: "mask-icon", href: "/favicon.svg", color: "#2f5a43" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
@@ -130,7 +160,10 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <AuthProvider>
+        <OfflineIndicator />
         <Outlet />
+        <PwaInstallPrompt />
+        <PwaUpdateToast />
         <Toaster position="top-center" />
       </AuthProvider>
     </QueryClientProvider>

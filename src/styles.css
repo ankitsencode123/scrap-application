@@ -124,6 +124,7 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: contain;
   }
   h1, h2, h3, h4 {
     font-family: var(--font-display);
@@ -153,8 +154,17 @@
   background-image: radial-gradient(oklch(1 0 0 / 7%) 1px, transparent 1px);
   background-size: 14px 14px;
 }
+@utility pt-safe {
+  padding-top: max(0.5rem, env(safe-area-inset-top));
+}
 @utility pb-safe {
   padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+@utility pl-safe {
+  padding-left: max(0.5rem, env(safe-area-inset-left));
+}
+@utility pr-safe {
+  padding-right: max(0.5rem, env(safe-area-inset-right));
 }
 
 @keyframes rise {

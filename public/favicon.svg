@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="scrappe-grad" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#34654b" />
+      <stop offset="100%" stop-color="#1f3d2e" />
+    </linearGradient>
+    <linearGradient id="sun-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fbbf24" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#14281e" flood-opacity="0.35" />
+    </filter>
+  </defs>
+
+  <!-- App Icon Background -->
+  <rect width="512" height="512" rx="115" fill="url(#scrappe-grad)" />
+
+  <!-- Outer Recycling Arcs -->
+  <g filter="url(#shadow)">
+    <!-- Arc 1 -->
+    <path d="M 395 256 A 140 140 0 0 1 180 376" stroke="#6ee7b7" stroke-width="36" stroke-linecap="round" fill="none" />
+    <!-- Arrowhead 1 -->
+    <polygon points="175,355 140,395 195,405" fill="#6ee7b7" />
+
+    <!-- Arc 2 -->
+    <path d="M 117 256 A 140 140 0 0 1 332 136" stroke="#ffffff" stroke-width="36" stroke-linecap="round" fill="none" />
+    <!-- Arrowhead 2 -->
+    <polygon points="337,157 372,117 317,107" fill="#ffffff" />
+  </g>
+
+  <!-- Center Sun Coin & Eco Leaf -->
+  <circle cx="256" cy="256" r="68" fill="url(#sun-grad)" filter="url(#shadow)" />
+  <path d="M 226 256 C 226 226, 256 226, 286 236 C 286 266, 256 286, 226 256 Z" fill="#1f3d2e" />
+  <circle cx="264" cy="246" r="6" fill="#ffffff" />
+</svg>

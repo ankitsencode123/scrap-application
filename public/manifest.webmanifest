@@ -1,0 +1,142 @@
+{
+  "name": "Scrappe — Doorstep Scrap Marketplace",
+  "short_name": "Scrappe",
+  "description": "Snap your scrap, get instant offers from verified nearby collectors, and have it picked up from your door.",
+  "start_url": "/?source=pwa",
+  "id": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": [
+    "window-controls-overlay",
+    "standalone",
+    "minimal-ui"
+  ],
+  "orientation": "portrait-primary",
+  "theme_color": "#2f5a43",
+  "background_color": "#f6f8f5",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": [
+    "shopping",
+    "utilities",
+    "business",
+    "lifestyle"
+  ],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Sell Scrap",
+      "short_name": "Sell",
+      "description": "Post scrap items for doorstep pickup",
+      "url": "/sell?source=shortcut",
+      "icons": [
+        {
+          "src": "/icons/shortcut-sell.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Nearby Collectors",
+      "short_name": "Map",
+      "description": "View live scrap collectors in your area",
+      "url": "/map?source=shortcut",
+      "icons": [
+        {
+          "src": "/icons/shortcut-map.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "My Chats",
+      "short_name": "Chats",
+      "description": "View collector conversations and offers",
+      "url": "/chats?source=shortcut",
+      "icons": [
+        {
+          "src": "/icons/shortcut-chats.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Home Dashboard",
+      "short_name": "Home",
+      "description": "View your scrap activity and orders",
+      "url": "/home?source=shortcut",
+      "icons": [
+        {
+          "src": "/icons/shortcut-home.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/screenshot-mobile.png",
+      "sizes": "540x1170",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Scrappe Mobile App"
+    },
+    {
+      "src": "/screenshots/screenshot-wide.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Scrappe Desktop & Tablet View"
+    }
+  ],
+  "share_target": {
+    "action": "/sell",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "description",
+      "url": "link"
+    }
+  },
+  "prefer_related_applications": false,
+  "related_applications": []
+}
