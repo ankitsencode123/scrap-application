@@ -103,6 +103,13 @@ function ChatsPage() {
     queryFn: () => api<ApiMessage[]>("/messages"),
   });
 
+  // User's own listings as fallback to initiate thread if listing is not yet specified
+  const { data: myListings = [] } = useQuery({
+    queryKey: ["my-listings-for-chat"],
+    enabled: Boolean(search.with && !search.listing),
+    queryFn: () => api<ApiListing[]>("/listings", { query: { scope: "mine" } }).catch(() => []),
+  });
+
   const threads = useMemo(() => {
     const m = new Map<string, { listing: string; with: string; last: ApiMessage; count: number }>();
     for (const x of msgs) {
@@ -137,23 +144,23 @@ function ChatsPage() {
     names.set(x.recipient_id, x.recipient_name);
     titles.set(x.listing_id, x.listing_title);
   }
-  const newThread = !!(search.listing && search.with) && !titles.has(search.listing!);
+  const newThread = Boolean(search.listing && search.with && !titles.has(search.listing));
   const { data: newPerson } = useQuery({
     queryKey: ["chatPerson", search.with],
-    enabled: newThread && !names.has(search.with!),
-    queryFn: () => api<PublicProfile>(`/users/${search.with}`),
+    enabled: Boolean(newThread && search.with && !names.has(search.with)),
+    queryFn: () => api<PublicProfile>(`/users/${search.with}`).catch(() => null),
   });
   const { data: newListing } = useQuery({
     queryKey: ["chatListing", search.listing],
-    enabled: newThread,
-    queryFn: () => api<ApiListing>(`/listings/${search.listing}`),
+    enabled: Boolean(newThread && search.listing),
+    queryFn: () => api<ApiListing>(`/listings/${search.listing}`).catch(() => null),
   });
   const name = (id: string) =>
     names.get(id) ?? (id === search.with ? newPerson?.display_name : undefined) ?? "User";
   const title = (id: string) =>
     titles.get(id) ?? (id === search.listing ? newListing?.title : undefined) ?? "Listing";
 
-  const open = !!(search.listing && search.with);
+  const open = Boolean(search.listing && search.with);
   const convo = msgs.filter(
     (m) =>
       m.listing_id === search.listing &&
@@ -176,7 +183,7 @@ function ChatsPage() {
           replace: true,
         });
       }
-    } else if (search.with && !search.listing && msgs.length > 0) {
+    } else if (search.with && !search.listing) {
       const match = msgs.find((m) => m.sender_id === search.with || m.recipient_id === search.with);
       if (match) {
         navigate({
@@ -184,9 +191,16 @@ function ChatsPage() {
           search: { listing: match.listing_id, with: search.with },
           replace: true,
         });
+      } else if (myListings.length > 0) {
+        // Fallback to seller's active or first listing
+        navigate({
+          to: "/chats",
+          search: { listing: myListings[0].id, with: search.with },
+          replace: true,
+        });
       }
     }
-  }, [search.listing, search.with, msgs, user?.id, navigate]);
+  }, [search.listing, search.with, msgs, myListings, user?.id, navigate]);
 
   const totalUnreadCount = unreadData?.total ?? 0;
 
@@ -200,6 +214,20 @@ function ChatsPage() {
       return (unreadItem?.unread ?? 0) > 0;
     });
   }, [threads, filterUnreadOnly, unreadData]);
+
+  const handleMarkRead = useCallback(() => {
+    if (search.listing && search.with) {
+      markRead(search.listing, search.with);
+    }
+  }, [search.listing, search.with, markRead]);
+
+  if (!user) {
+    return (
+      <div className="flex min-h-[350px] items-center justify-center">
+        <Loader2 className="size-6 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="grid h-[calc(100vh-11rem)] gap-4 md:h-[calc(100vh-7rem)] md:grid-cols-[330px_1fr]">
@@ -422,7 +450,7 @@ function ChatsPage() {
             listingTitle={title(search.listing!)}
             msgs={convo}
             loadingMsgs={isLoading}
-            me={user!.id}
+            me={user?.id ?? ""}
             isPeerOnline={isPeerOnline}
             isPeerTyping={isPeerTyping}
             arrivedMsgIds={arrivedMsgIds}
@@ -430,7 +458,7 @@ function ChatsPage() {
             onSendMessage={sendChatMessage}
             onStartTyping={startTyping}
             onStopTyping={stopTyping}
-            onMarkRead={() => markRead(search.listing!, search.with!)}
+            onMarkRead={handleMarkRead}
             onBack={() => navigate({ to: "/chats", search: {} })}
           />
         ) : (
@@ -503,10 +531,21 @@ function Thread({
   const [isMuted, setIsMuted] = useState(isChatSoundMuted());
   const [showScrollDown, setShowScrollDown] = useState(false);
 
-  // Mark read whenever conversation opens or messages update
+  const onMarkReadRef = useRef(onMarkRead);
+  onMarkReadRef.current = onMarkRead;
+
+  const prevConvoKey = useRef("");
+  const prevMsgLength = useRef(0);
+
+  // Mark read once when conversation opens or when new messages arrive
   useEffect(() => {
-    onMarkRead();
-  }, [listing, other, msgs.length, onMarkRead]);
+    const convoKey = `${listing}|${other}`;
+    if (convoKey !== prevConvoKey.current || msgs.length !== prevMsgLength.current) {
+      prevConvoKey.current = convoKey;
+      prevMsgLength.current = msgs.length;
+      onMarkReadRef.current();
+    }
+  }, [listing, other, msgs.length]);
 
   // Handle auto-scroll & scroll-down indicator
   const scrollToBottom = (smooth = true) => {

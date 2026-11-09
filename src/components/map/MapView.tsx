@@ -97,6 +97,12 @@ const POPUP_OPTS: L.PopupOptions = {
   closeButton: true,
 };
 
+declare global {
+  interface Window {
+    __scrappe_open_chat?: (withId: string, listingId?: string) => void;
+  }
+}
+
 interface MapViewProps {
   onSwitchToListings?: () => void;
   initialCenter?: { lat: number; lng: number };
@@ -105,6 +111,22 @@ interface MapViewProps {
 export default function MapView({ onSwitchToListings, initialCenter }: MapViewProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  // SPA navigation handler for raw HTML popups rendered inside Leaflet markers
+  useEffect(() => {
+    window.__scrappe_open_chat = (withId: string, listingId?: string) => {
+      navigate({
+        to: "/chats",
+        search: {
+          with: withId,
+          listing: listingId && listingId.trim() !== "" ? listingId : undefined,
+        },
+      });
+    };
+    return () => {
+      delete window.__scrappe_open_chat;
+    };
+  }, [navigate]);
 
   // Role strictly assigned from authenticated session
   const role: "seller" | "collector" = user?.role === "collector" ? "collector" : "seller";
@@ -170,7 +192,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
     refetchInterval: 10000,
   });
 
-  const myListings = myListingsData?.items ?? [];
+  const myListings = useMemo(() => myListingsData?.items ?? [], [myListingsData?.items]);
 
   // Identify active listing for seller view
   const activeListing = useMemo(() => {
@@ -543,7 +565,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
     if (role === "seller") {
       // Show real online collectors nearby
       nearbyCollectors.forEach((c) => {
-        const chatUrl = `/chats?with=${c.id}${activeListing?.id ? `&listing=${activeListing.id}` : ""}`;
+        const targetListingId = activeListing?.id || myListings[0]?.id || "";
         L.marker([c.lat, c.lng], {
           icon: divIcon(
             '<div class="chip-marker border-2 border-emerald-500 shadow-sm">🛺</div>',
@@ -551,7 +573,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
           ),
         })
           .bindPopup(
-            `<b>${c.display_name}</b><br/>★ ${c.rating_avg.toFixed(1)} (${c.rating_count} reviews)<br/><small>${c.distance_km} km away · Online now</small><div style="margin-top:6px;"><a href="${chatUrl}" style="display:inline-block;padding:4px 10px;background:#2f5a43;color:#ffffff;border-radius:8px;font-size:11px;font-weight:600;text-decoration:none;">💬 Chat with ${c.display_name}</a></div>`,
+            `<b>${c.display_name}</b><br/>★ ${c.rating_avg.toFixed(1)} (${c.rating_count} reviews)<br/><small>${c.distance_km} km away · Online now</small><div style="margin-top:6px;"><button type="button" onclick="window.__scrappe_open_chat && window.__scrappe_open_chat('${c.id}', '${targetListingId}')" style="display:inline-block;padding:5px 12px;background:#2f5a43;color:#ffffff;border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;">💬 Chat with ${c.display_name}</button></div>`,
             POPUP_OPTS,
           )
           .addTo(ng);
@@ -571,7 +593,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
           .addTo(ng);
       });
     }
-  }, [role, nearbyCollectors, mapListingsData?.items]);
+  }, [role, nearbyCollectors, mapListingsData?.items, activeListing?.id, myListings]);
 
   // --------------------------------------------------------------------------
   // 8. DYNAMIC ROUTE GENERATION & REAL PICKUPS
@@ -810,7 +832,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
 
     const vehiclePopupHtml = `<b>${role === "seller" ? (activeListing?.collector?.display_name ?? "Scrap Collector") : (user?.display_name ?? "Collection Vehicle")}</b><br/>${activeListing?.status === "on_the_way" ? "Live En Route" : "Collector Assigned"}${
       role === "seller" && activeListing?.collector?.id
-        ? `<div style="margin-top:8px;"><a href="/chats?listing=${activeListing.id}&with=${activeListing.collector.id}" style="display:inline-block;padding:5px 12px;background:#2f5a43;color:#ffffff;border-radius:10px;font-size:12px;font-weight:600;text-decoration:none;">💬 Chat with Collector</a></div>`
+        ? `<div style="margin-top:8px;"><button type="button" onclick="window.__scrappe_open_chat && window.__scrappe_open_chat('${activeListing.collector.id}', '${activeListing.id}')" style="display:inline-block;padding:5px 12px;background:#2f5a43;color:#ffffff;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;">💬 Chat with Collector</button></div>`
         : ""
     }`;
 

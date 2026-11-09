@@ -41,9 +41,17 @@ export function useChatSocket(activeListing?: string, activeWith?: string) {
 
   const pingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastMarkedRead = useRef<Record<string, number>>({});
 
   const markRead = useCallback(
     (listingId: string, peerId: string) => {
+      if (!listingId || !peerId) return;
+      const key = `${listingId}|${peerId}`;
+      const now = Date.now();
+      // Throttle mark-read per conversation to at most once every 3 seconds
+      if (now - (lastMarkedRead.current[key] ?? 0) < 3000) return;
+      lastMarkedRead.current[key] = now;
+
       // 1. Send WebSocket frame if connected
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.send(
@@ -55,7 +63,7 @@ export function useChatSocket(activeListing?: string, activeWith?: string) {
         );
       }
 
-      // 2. HTTP fallback for guarantee
+      // 2. HTTP fallback for guarantee (safely throttled)
       api("/chat/read", {
         method: "POST",
         body: { listing_id: listingId, peer_id: peerId },
@@ -75,9 +83,9 @@ export function useChatSocket(activeListing?: string, activeWith?: string) {
 
       // 4. Clear arrival highlight for this thread
       setArrivedThreadKeys((prev) => {
-        if (!prev.has(`${listingId}|${peerId}`)) return prev;
+        if (!prev.has(key)) return prev;
         const next = new Set(prev);
-        next.delete(`${listingId}|${peerId}`);
+        next.delete(key);
         return next;
       });
     },
