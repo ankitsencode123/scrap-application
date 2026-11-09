@@ -33,19 +33,25 @@ def upload_images(seller: SellerUser, files: Annotated[list[UploadFile], File(de
             raise HTTPException(413, f"{f.filename}: image exceeds {settings.MAX_IMAGE_BYTES // (1024 * 1024)} MB")
         items_to_process.append((f.filename or "photo.jpg", raw))
 
-    def _process_and_save(item: tuple[str, bytes]) -> UploadedImage:
+    def _process(item: tuple[str, bytes]) -> tuple[bytes, str, str]:
         _, raw = item
         data = process_image(raw)
         key = f"listings/{seller.id}/{uuid.uuid4().hex}.jpg"
-        url = storage.save(data, key, "image/jpeg")
-        return UploadedImage(url=url, key=key)
+        return (data, key, "image/jpeg")
 
-    # Process and save images in parallel
+    # In-memory image processing in parallel
     if len(items_to_process) == 1:
-        return [_process_and_save(items_to_process[0])]
+        processed_items = [_process(items_to_process[0])]
+    else:
+        with ThreadPoolExecutor(max_workers=min(len(items_to_process), 6)) as executor:
+            processed_items = list(executor.map(_process, items_to_process))
 
-    with ThreadPoolExecutor(max_workers=min(len(items_to_process), 6)) as executor:
-        return list(executor.map(_process_and_save, items_to_process))
+    # Batch save all images in a single database round-trip
+    urls = storage.save_batch(processed_items)
+    return [
+        UploadedImage(url=url, key=key)
+        for url, (_, key, _) in zip(urls, processed_items)
+    ]
 
 
 @uploads_router.post("/avatar", response_model=UploadedImage, status_code=201)

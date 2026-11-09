@@ -118,6 +118,25 @@ function ListingPage() {
     return true;
   };
 
+  const acceptAskingPrice = async () => {
+    const p = Number(l.expected_price);
+    if (!p || p <= 0) {
+      toast.error("Invalid asking price");
+      return;
+    }
+    await run(
+      () =>
+        api(`/listings/${id}/bids`, {
+          method: "POST",
+          body: {
+            amount: p,
+            note: `I accept your asking price of ${formatINR(p)}. Ready for pickup!`,
+          },
+        }),
+      `Accepted asking price of ${formatINR(p)}!`
+    );
+  };
+
   const makeOffer = async () => {
     const n = Number(amount);
     if (!n || n <= 0) { toast.error("Enter a price"); return; }
@@ -317,11 +336,18 @@ function ListingPage() {
         )}
 
         {l.status === "posted" && canBid && (
-          <section className="rounded-3xl border bg-card p-5">
-            <h2 className="mb-3 font-extrabold">Make an offer</h2>
+          <section className="rounded-3xl border bg-card p-5 space-y-4">
+            <div>
+              <h2 className="font-extrabold text-lg">Collector Offers</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Asking price: <b className="text-primary font-bold">{formatINR(l.expected_price)}</b>
+                {l.is_negotiable ? " (Negotiable)" : " (Firm price)"}
+              </p>
+            </div>
+
             {myOffer ? (
-              <div className="space-y-2">
-                <p className="text-sm">You offered <b className="text-primary">{formatINR(myOffer.amount)}</b> · waiting for the seller.</p>
+              <div className="space-y-3 rounded-2xl border bg-muted/30 p-3.5">
+                <p className="text-sm">You offered <b className="text-primary font-bold">{formatINR(myOffer.amount)}</b> · waiting for seller response.</p>
                 {myOffer.status === "pending" && (
                   <Button variant="outline" size="sm" disabled={busy} onClick={() => withdraw(myOffer.id)}>
                     {busy && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
@@ -330,17 +356,91 @@ function ListingPage() {
                 )}
               </div>
             ) : (
-              <div className="space-y-2">
-                <Input type="number" inputMode="numeric" placeholder="Your price in ₹" value={amount} onChange={(e) => setAmount(e.target.value)} />
-                <Textarea placeholder="Message (e.g. I can come today at 5pm)" value={note} onChange={(e) => setNote(e.target.value)} />
-                <Button className="w-full" disabled={busy} onClick={makeOffer}>
-                  {busy && <Loader2 className="mr-2 size-4 animate-spin" />}
-                  Send offer
+              <div className="space-y-3">
+                {/* 1-Tap Direct Accept Asking Price */}
+                <Button
+                  size="lg"
+                  className="w-full h-12 text-base font-bold bg-primary hover:bg-primary/90 text-primary-foreground rounded-2xl shadow-sm"
+                  disabled={busy}
+                  onClick={acceptAskingPrice}
+                >
+                  {busy ? <Loader2 className="mr-2 size-5 animate-spin" /> : <Check className="mr-2 size-5" />}
+                  Accept Asking Price · {formatINR(l.expected_price)}
                 </Button>
+
+                {/* Counter offer section */}
+                <div className="relative my-2 flex items-center justify-center">
+                  <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
+                  <span className="relative bg-card px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    or send a counter-offer
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setAmount(String(l.expected_price))}
+                      className={cn(
+                        "rounded-full px-2.5 py-1 text-xs font-semibold border transition-colors",
+                        amount === String(l.expected_price)
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-muted hover:bg-muted/80 text-foreground border-border"
+                      )}
+                    >
+                      {formatINR(l.expected_price)} (Asking)
+                    </button>
+                    {l.expected_price > 100 && (
+                      <button
+                        type="button"
+                        onClick={() => setAmount(String(Math.round(l.expected_price * 0.9)))}
+                        className={cn(
+                          "rounded-full px-2.5 py-1 text-xs font-semibold border transition-colors",
+                          amount === String(Math.round(l.expected_price * 0.9))
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-muted hover:bg-muted/80 text-foreground border-border"
+                        )}
+                      >
+                        {formatINR(Math.round(l.expected_price * 0.9))} (-10%)
+                      </button>
+                    )}
+                    {l.expected_price > 200 && (
+                      <button
+                        type="button"
+                        onClick={() => setAmount(String(Math.round(l.expected_price * 0.8)))}
+                        className={cn(
+                          "rounded-full px-2.5 py-1 text-xs font-semibold border transition-colors",
+                          amount === String(Math.round(l.expected_price * 0.8))
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-muted hover:bg-muted/80 text-foreground border-border"
+                        )}
+                      >
+                        {formatINR(Math.round(l.expected_price * 0.8))} (-20%)
+                      </button>
+                    )}
+                  </div>
+
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="Custom counter offer in ₹"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                  />
+                  <Textarea
+                    placeholder="Message to seller (e.g. Can pick up today at 4 PM)"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                  />
+                  <Button variant="secondary" className="w-full font-bold" disabled={busy} onClick={makeOffer}>
+                    {busy && <Loader2 className="mr-2 size-4 animate-spin" />}
+                    Send Counter-Offer
+                  </Button>
+                </div>
               </div>
             )}
-            <Button asChild variant="outline" className="mt-2 w-full">
-              <Link to="/chats" search={{ listing: id, with: l.seller.id }}><MessageCircle className="size-4" /> Ask the seller</Link>
+            <Button asChild variant="outline" className="w-full">
+              <Link to="/chats" search={{ listing: id, with: l.seller.id }}><MessageCircle className="size-4 mr-1.5" /> Ask the seller</Link>
             </Button>
           </section>
         )}

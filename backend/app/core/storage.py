@@ -13,6 +13,9 @@ class StorageBackend:
     def save(self, data: bytes, key: str, content_type: str = "image/jpeg") -> str:
         raise NotImplementedError
 
+    def save_batch(self, items: list[tuple[bytes, str, str]]) -> list[str]:
+        return [self.save(data, key, ct) for data, key, ct in items]
+
     def delete(self, key: str) -> None:
         raise NotImplementedError
 
@@ -170,6 +173,39 @@ class SupabaseStorage(StorageBackend):
         except Exception:
             log.exception("Supabase media save failed for key %s", key)
             raise HTTPException(502, "Image storage is temporarily unavailable")
+
+    def save_batch(self, items: list[tuple[bytes, str, str]]) -> list[str]:
+        if not items:
+            return []
+        if len(items) == 1:
+            return [self.save(items[0][0], items[0][1], items[0][2])]
+
+        import psycopg2
+        from psycopg2.extras import execute_values
+
+        try:
+            with psycopg2.connect(self.raw_url, connect_timeout=8) as conn:
+                with conn.cursor() as cur:
+                    rows = [
+                        (key, psycopg2.Binary(data), ct, len(data))
+                        for data, key, ct in items
+                    ]
+                    execute_values(
+                        cur,
+                        """
+                        INSERT INTO public.media_files (key, data, content_type, size_bytes)
+                        VALUES %s
+                        ON CONFLICT (key) DO UPDATE SET
+                            data = EXCLUDED.data,
+                            content_type = EXCLUDED.content_type,
+                            size_bytes = EXCLUDED.size_bytes;
+                        """,
+                        rows,
+                    )
+            return [f"{self.public_base}/media/{key}" for _, key, _ in items]
+        except Exception:
+            log.exception("Supabase media batch save failed, falling back to sequential save")
+            return [self.save(data, key, ct) for data, key, ct in items]
 
     def get(self, key: str) -> tuple[bytes, str] | None:
         if self.supabase_key:

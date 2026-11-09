@@ -82,6 +82,14 @@ const divIcon = (html: string, size: number, anchor?: [number, number]) =>
 
 const SPEED_KMH = 24;
 
+const POPUP_OPTS: L.PopupOptions = {
+  maxWidth: 240,
+  autoPanPaddingTopLeft: [20, 70],
+  autoPanPaddingBottomRight: [20, 120],
+  autoPan: true,
+  closeButton: true,
+};
+
 interface MapViewProps {
   onSwitchToListings?: () => void;
   initialCenter?: { lat: number; lng: number };
@@ -415,7 +423,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
       icon: divIcon('<div class="user-loc"><div class="ring"></div><div class="dot"></div></div>', 18),
       zIndexOffset: 900,
     })
-      .bindPopup(`<b>You are here</b><br/>${user?.display_name ?? "Current User"}`)
+      .bindPopup(`<b>You are here</b><br/>${user?.display_name ?? "Current User"}`, POPUP_OPTS)
       .addTo(ul);
 
     // Subtle proximity geofence
@@ -445,7 +453,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
       }).addTo(cg);
 
       L.marker(c.pos, { icon: divIcon(`<div class="chip-marker">${ICON[c.kind] ?? "🏭"}</div>`, 30) })
-        .bindPopup(`<b>${c.name}</b><br/>Radius ${(c.radius / 1000).toFixed(1)} km · ${(d / 1000).toFixed(1)} km from your location`)
+        .bindPopup(`<b>${c.name}</b><br/>Radius ${(c.radius / 1000).toFixed(1)} km · ${(d / 1000).toFixed(1)} km from your location`, POPUP_OPTS)
         .addTo(cg);
     });
   }, [centres, userPos]);
@@ -491,6 +499,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
         })
           .bindPopup(
             `<b>${c.display_name}</b><br/>★ ${c.rating_avg.toFixed(1)} (${c.rating_count} reviews)<br/><small>${c.distance_km} km away · Online now</small>`,
+            POPUP_OPTS
           )
           .addTo(ng);
       });
@@ -504,6 +513,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
         })
           .bindPopup(
             `<b>${item.title}</b><br/>${meta.emoji} ${item.category_label} · ${item.weight_kg} kg<br/>Expected: ₹${item.expected_price.toLocaleString("en-IN")}<br/><small>${item.distance_km ? `${item.distance_km} km away` : ""}</small>`,
+            POPUP_OPTS
           )
           .addTo(ng);
       });
@@ -541,6 +551,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
         })
           .bindPopup(
             `<b>Your Scrap Pickup</b><br/>${meta.emoji} ${meta.label} · ${activeListing.weight_kg ?? 0} kg<br/>Expected Payout: ₹${((activeListing.final_price ?? activeListing.expected_price) || 0).toLocaleString("en-IN")}`,
+            POPUP_OPTS
           )
           .addTo(sl);
 
@@ -561,6 +572,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
           })
             .bindPopup(
               `<b>Your Scrap Listing (Awaiting Bids)</b><br/>${meta.emoji} ${meta.label} · ${activeListing.weight_kg ?? 0} kg<br/>Expected Payout: ₹${((activeListing.final_price ?? activeListing.expected_price) || 0).toLocaleString("en-IN")}`,
+              POPUP_OPTS
             )
             .addTo(sl);
 
@@ -581,6 +593,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
           })
             .bindPopup(
               `<b>Customer Pickup ${i + 1} · ${stop.label}</b><br/>${meta.emoji} ${meta.label} · ${stop.kg} kg<br/>₹${stop.expected_price.toLocaleString("en-IN")}`,
+              POPUP_OPTS
             )
             .addTo(sl);
           waypoints.push(stop.pos);
@@ -642,7 +655,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
   }, [trackingData?.eta_s, remainingKm]);
 
   const pct = totalKm ? 1 - remainingKm / totalKm : 0;
-  const finished = path.length > 0 && progress >= path.length - 1;
+  const finished = activeListing?.status === "completed";
 
   useEffect(() => {
     const m = map.current;
@@ -710,53 +723,47 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
       }
     }, 25);
 
-    // Initial vehicle marker placement
+    // Initial vehicle marker placement at real collector position or start of path
+    const startPos = trackingData?.collector
+      ? ([trackingData.collector.lat, trackingData.collector.lng] as LatLng)
+      : path[0]!;
+
     if (!vehicle.current) {
-      vehicle.current = L.marker(path[0]!, {
+      vehicle.current = L.marker(startPos, {
         icon: divIcon('<div class="vehicle">🚚</div>', 44),
         zIndexOffset: 1000,
       })
         .bindPopup(
-          `<b>${role === "seller" ? (activeListing?.collector?.display_name ?? "Scrap Collector") : (user?.display_name ?? "Collection Vehicle")}</b><br/>Live GPS Dispatch`,
+          `<b>${role === "seller" ? (activeListing?.collector?.display_name ?? "Scrap Collector") : (user?.display_name ?? "Collection Vehicle")}</b><br/>${activeListing?.status === "on_the_way" ? "Live En Route" : "Collector Assigned"}`,
+          POPUP_OPTS
         )
         .addTo(m);
     } else {
-      vehicle.current.setLatLng(path[0]!);
+      vehicle.current.setLatLng(startPos);
     }
 
     m.fitBounds(L.latLngBounds(path), {
-      paddingTopLeft: [60, 100],
-      paddingBottomRight: [window.innerWidth >= 1024 ? 400 : 50, 70],
+      paddingTopLeft: [60, 60],
+      paddingBottomRight: [window.innerWidth >= 1024 ? 400 : 40, 100],
     });
 
     return () => clearInterval(t);
-  }, [routes, activeRoute, isTrackingActive, role, collectorStops.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [routes, activeRoute, isTrackingActive, role, collectorStops.length, trackingData?.collector]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Vehicle movement & tracking
+  // Update vehicle position strictly when real collector GPS data arrives (No fake timer simulation!)
   useEffect(() => {
-    const isNavActive = role === "seller" ? isTrackingActive : collectorStops.length > 0;
-    if (loading || !path.length || !isNavActive) return;
-    const t = setInterval(
-      () => setProgress((p) => Math.min(path.length - 1, p + Math.max(1, Math.round(path.length / 350)))),
-      400,
-    );
-    return () => clearInterval(t);
-  }, [loading, path.length, role, isTrackingActive, collectorStops.length]);
-
-  useEffect(() => {
-    if (!path.length || !vehicle.current) return;
-    const pos = path[progress]!;
-    vehicle.current.setLatLng(pos);
-    doneLine.current?.setLatLngs(path.slice(0, progress + 1));
-
-    if (progress > 0) {
-      const prev = path[Math.max(0, progress - 2)]!;
-      setBearing((Math.atan2(pos[1] - prev[1], pos[0] - prev[0]) * 180) / Math.PI);
+    if (!vehicle.current) return;
+    if (trackingData?.collector) {
+      const realPos: LatLng = [trackingData.collector.lat, trackingData.collector.lng];
+      vehicle.current.setLatLng(realPos);
+      if (trackingData.collector.heading != null) {
+        setBearing(trackingData.collector.heading);
+      }
+      if (follow && map.current) {
+        map.current.panTo(realPos, { animate: true, duration: 0.5 });
+      }
     }
-    if (follow && map.current && progress > 0) {
-      map.current.panTo(pos, { animate: true, duration: 0.5 });
-    }
-  }, [progress, follow, path]);
+  }, [trackingData?.collector, follow]);
 
   // --------------------------------------------------------------------------
   // 10. REAL STATUS TEXT & STEPS
@@ -774,9 +781,9 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
     if (activeListing.status === "offer_accepted") return 1;
     if (activeListing.status === "on_the_way") return 2;
     if (activeListing.status === "arrived") return 3;
-    if (activeListing.status === "completed") return 5;
-    return finished ? 5 : progress > path.length * 0.75 ? 4 : progress > 0 ? 2 : 1;
-  }, [activeListing, finished, progress, path.length]);
+    if (activeListing.status === "completed") return 4;
+    return 0;
+  }, [activeListing?.status]);
 
   const realStatusLabel = useMemo(() => {
     if (finished) return "Delivery Completed";
@@ -961,6 +968,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
         <RailBtn
           label="Legend"
           active={legendOpen}
+          className="hidden md:grid"
           onClick={() => {
             setLegendOpen((v) => !v);
             setNotifOpen(false);
@@ -969,13 +977,13 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
         >
           <Shapes className="h-4 w-4" />
         </RailBtn>
-        <RailBtn label="Fullscreen" onClick={toggleFullscreen}>
+        <RailBtn label="Fullscreen" className="hidden md:grid" onClick={toggleFullscreen}>
           {fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
         </RailBtn>
-        <RailBtn label="Help" onClick={() => toast("ScrapPe Support: Call 1800-SCRAP-CYCLE or use Chat")}>
+        <RailBtn label="Help" className="hidden md:grid" onClick={() => toast("ScrapPe Support: Call 1800-SCRAP-CYCLE or use Chat")}>
           <HelpCircle className="h-4 w-4" />
         </RailBtn>
-        <div className="glass-panel grid h-10 w-10 place-items-center rounded-full" title="Vehicle heading">
+        <div className="glass-panel hidden md:grid h-10 w-10 place-items-center rounded-full" title="Vehicle heading">
           <Compass
             className="h-5 w-5 text-primary transition-transform duration-500"
             style={{ transform: `rotate(${bearing}deg)` }}
@@ -1063,13 +1071,13 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
 
       {/* Zoom / Recenter stack */}
       <div className="absolute bottom-6 right-4 z-[1000] hidden flex-col gap-2 lg:right-[25rem] lg:flex">
-        <ZoomStack map={map} follow={follow} setFollow={setFollow} vehiclePos={path[progress]} userPos={userPos} />
+        <ZoomStack map={map} follow={follow} setFollow={setFollow} vehiclePos={trackingData?.collector ? [trackingData.collector.lat, trackingData.collector.lng] : path[0]} userPos={userPos} />
       </div>
       <div
-        className="absolute right-4 z-[1000] flex flex-col gap-2 lg:hidden"
-        style={{ bottom: sheetOpen ? "62%" : "7rem" }}
+        className="absolute right-3 z-[1000] flex flex-col gap-2 lg:hidden"
+        style={{ bottom: sheetOpen ? "64%" : "8.5rem" }}
       >
-        <ZoomStack map={map} follow={follow} setFollow={setFollow} vehiclePos={path[progress]} userPos={userPos} />
+        <ZoomStack map={map} follow={follow} setFollow={setFollow} vehiclePos={trackingData?.collector ? [trackingData.collector.lat, trackingData.collector.lng] : path[0]} userPos={userPos} isMobile={true} />
       </div>
 
       {/* Overlay quick toggles (desktop) */}
@@ -1103,8 +1111,8 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
 
       {/* Main Info Panel: Desktop floating sidebar, mobile bottom sheet */}
       <aside
-        className={`glass-panel absolute z-[1100] flex flex-col overflow-hidden transition-all duration-500 ease-out
-        inset-x-2 bottom-2 rounded-3xl lg:inset-x-auto lg:bottom-4 lg:right-4 lg:top-4 lg:w-[24rem]
+        className={`glass-panel absolute z-[1100] flex flex-col overflow-hidden transition-all duration-300 ease-out
+        inset-x-2 bottom-6 rounded-3xl lg:inset-x-auto lg:bottom-4 lg:right-4 lg:top-4 lg:w-[24rem]
         ${sheetOpen ? "max-h-[62%] lg:max-h-none" : "max-h-24 lg:max-h-none"}`}
       >
         <button
@@ -1130,10 +1138,12 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
               )}
               {realStatusLabel}
             </p>
-            <p className="font-display text-3xl font-bold leading-tight">
+            <p className="font-display text-2xl md:text-3xl font-bold leading-tight">
               {role === "seller"
                 ? isTrackingActive
-                  ? finished ? "Completed" : `${etaMin} min ETA`
+                  ? activeListing?.status === "offer_accepted"
+                    ? "Collector Assigned"
+                    : finished ? "Completed" : `${etaMin} min ETA`
                   : activeListing?.status === "posted"
                     ? "Listing Posted"
                     : "No Active Pickup"
@@ -1143,10 +1153,12 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
                     ? `${etaMin} min ETA`
                     : "Marketplace Active"}
             </p>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs md:text-sm text-muted-foreground">
               {role === "seller"
                 ? isTrackingActive
-                  ? `${remainingKm.toFixed(1)} km remaining · ${SPEED_KMH} km/h road avg`
+                  ? activeListing?.status === "offer_accepted"
+                    ? "Waiting for collector departure to your doorstep"
+                    : `${remainingKm.toFixed(1)} km remaining · Live GPS tracking`
                   : activeListing?.status === "posted"
                     ? `Awaiting bids from ${nearbyCollectors.length > 0 ? nearbyCollectors.length : "nearby"} collectors`
                     : "Post scrap to schedule pickup and track live"
@@ -1497,17 +1509,8 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
           {finished && (
             <div className="rounded-2xl bg-success/15 p-4 text-center">
               <p className="text-2xl">🎉</p>
-              <p className="font-display font-bold">Route Completed</p>
+              <p className="font-display font-bold">Pickup & Delivery Completed</p>
               <p className="text-xs text-muted-foreground">Scrap delivered to {destination.name}.</p>
-              <button
-                onClick={() => {
-                  setProgress(0);
-                  toastedRef.current.clear();
-                }}
-                className="mt-2 rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground"
-              >
-                Replay route
-              </button>
             </div>
           )}
         </div>
@@ -1525,32 +1528,36 @@ function ZoomStack({
   setFollow,
   vehiclePos,
   userPos,
+  isMobile = false,
 }: {
   map: React.RefObject<L.Map | null>;
   follow: boolean;
   setFollow: (v: boolean) => void;
   vehiclePos?: LatLng | undefined;
   userPos: LatLng;
+  isMobile?: boolean;
 }) {
   return (
     <>
-      <div className="glass-panel flex flex-col overflow-hidden rounded-2xl">
-        <button
-          onClick={() => map.current?.zoomIn()}
-          className="grid h-10 w-10 place-items-center hover:bg-muted"
-          aria-label="Zoom in"
-        >
-          <Plus className="h-4 w-4" />
-        </button>
-        <div className="h-px bg-border" />
-        <button
-          onClick={() => map.current?.zoomOut()}
-          className="grid h-10 w-10 place-items-center hover:bg-muted"
-          aria-label="Zoom out"
-        >
-          <Minus className="h-4 w-4" />
-        </button>
-      </div>
+      {!isMobile && (
+        <div className="glass-panel flex flex-col overflow-hidden rounded-2xl">
+          <button
+            onClick={() => map.current?.zoomIn()}
+            className="grid h-10 w-10 place-items-center hover:bg-muted"
+            aria-label="Zoom in"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+          <div className="h-px bg-border" />
+          <button
+            onClick={() => map.current?.zoomOut()}
+            className="grid h-10 w-10 place-items-center hover:bg-muted"
+            aria-label="Zoom out"
+          >
+            <Minus className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       <RailBtn
         label="Recenter on me"
         onClick={() => {
@@ -1560,25 +1567,29 @@ function ZoomStack({
       >
         <LocateFixed className="h-4 w-4" />
       </RailBtn>
-      <RailBtn
-        label="Follow vehicle"
-        active={follow}
-        onClick={() => {
-          setFollow(true);
-          if (vehiclePos) map.current?.flyTo(vehiclePos, 16);
-        }}
-      >
-        <Navigation className="h-4 w-4" />
-      </RailBtn>
-      <RailBtn
-        label="Reset view"
-        onClick={() => {
-          setFollow(false);
-          map.current?.flyTo(userPos, 14);
-        }}
-      >
-        <Crosshair className="h-4 w-4" />
-      </RailBtn>
+      {vehiclePos && (
+        <RailBtn
+          label="Follow vehicle"
+          active={follow}
+          onClick={() => {
+            setFollow(true);
+            map.current?.flyTo(vehiclePos, 16);
+          }}
+        >
+          <Navigation className="h-4 w-4" />
+        </RailBtn>
+      )}
+      {!isMobile && (
+        <RailBtn
+          label="Reset view"
+          onClick={() => {
+            setFollow(false);
+            map.current?.flyTo(userPos, 14);
+          }}
+        >
+          <Crosshair className="h-4 w-4" />
+        </RailBtn>
+      )}
     </>
   );
 }
@@ -1589,12 +1600,14 @@ function RailBtn({
   onClick,
   active,
   badge,
+  className = "",
 }: {
   children: React.ReactNode;
   label: string;
   onClick: () => void;
   active?: boolean;
   badge?: number;
+  className?: string;
 }) {
   return (
     <button
@@ -1603,7 +1616,7 @@ function RailBtn({
       title={label}
       className={`relative grid h-10 w-10 place-items-center rounded-full transition hover:scale-105 ${
         active ? "bg-primary text-primary-foreground shadow-float" : "glass-panel text-foreground"
-      }`}
+      } ${className}`}
     >
       {children}
       {!!badge && (
