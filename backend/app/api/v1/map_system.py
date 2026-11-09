@@ -1209,7 +1209,7 @@ async def get_assignment(listing_id: uuid.UUID, fresh: bool = False) -> dict | N
 def _active_for_collector_sync(collector_id: uuid.UUID) -> list[dict]:
     stmt = select(Listing.id, Listing.seller_id, Listing.collector_id, Listing.status, Listing.latitude,
                   Listing.longitude, Listing.address).where(
-        Listing.collector_id == collector_id, Listing.status.in_([ListingStatus.ON_THE_WAY, ListingStatus.ARRIVED]))
+        Listing.collector_id == collector_id, Listing.status.in_([ListingStatus.OFFER_ACCEPTED, ListingStatus.ON_THE_WAY, ListingStatus.ARRIVED]))
     res = get_router().scatter(lambda s, sid: [dict(x._mapping) for x in s.execute(stmt).all()])
     if res.failed:
         log.warning("active pickup lookup partial; shards down: %s", sorted(res.failed))
@@ -1218,7 +1218,7 @@ def _active_for_collector_sync(collector_id: uuid.UUID) -> list[dict]:
 
 async def active_pickups(collector_id: uuid.UUID, hint: uuid.UUID | None) -> list[dict]:
     r = rt()
-    live = (ListingStatus.ON_THE_WAY, ListingStatus.ARRIVED)
+    live = (ListingStatus.OFFER_ACCEPTED, ListingStatus.ON_THE_WAY, ListingStatus.ARRIVED)
     if hint:
         a = await get_assignment(hint)
         return [a] if a and a["collector_id"] == collector_id and a["status"] in live else []
@@ -1945,12 +1945,27 @@ async def get_tracking(listing_id: uuid.UUID, user: CurrentUser, include_route: 
     if not a or user.id not in (a["seller_id"], a["collector_id"]):
         raise HTTPException(404, "Listing not found")
     base = TrackingOut(listing_id=listing_id, status=a["status"], tracking_active=False)
-    if a["status"] not in (ListingStatus.ON_THE_WAY, ListingStatus.ARRIVED):
-        base.reason = "Live tracking starts when the collector is on the way" if a["status"] == ListingStatus.OFFER_ACCEPTED else "Pickup is not active"
+    active_statuses = (ListingStatus.OFFER_ACCEPTED, ListingStatus.ON_THE_WAY, ListingStatus.ARRIVED)
+    if a["status"] not in active_statuses:
+        base.reason = "Pickup is not active"
         return base
     if a["latitude"] is not None and a["longitude"] is not None:
         base.destination = {"lat": a["latitude"], "lng": a["longitude"], "address": a["address"]}
     fix = await r.store.get_fix(str(a["collector_id"]))
+    if not fix:
+        collector_user = await run_in_threadpool(_load_user_sync, a["collector_id"])
+        if collector_user and collector_user.latitude is not None and collector_user.longitude is not None:
+            now = time.time()
+            fix = {
+                "lat": collector_user.latitude,
+                "lng": collector_user.longitude,
+                "acc": 15.0,
+                "rx": now,
+                "ts": now,
+                "spd": 0.0,
+                "hdg": None,
+            }
+            await r.store.put_fix(str(a["collector_id"]), fix, r.cfg.fix_ttl_s)
     if not fix:
         base.reason = "Waiting for the collector's location"
         return base

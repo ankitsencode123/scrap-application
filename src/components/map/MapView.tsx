@@ -213,7 +213,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
     queryFn: () =>
       api<TrackingOut>(`/map/tracking/${activeListing!.id}`, { query: { include_route: true } }),
     enabled: isTrackingActive,
-    refetchInterval: 5000,
+    refetchInterval: 3000,
   });
 
   // C. Nearby Online Collectors (for seller when awaiting collector assignment)
@@ -381,33 +381,58 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
     locateUser();
   }, [locateUser]);
 
-  // Periodically send collector location fix while active
+  // Real-time GPS stream for collectors while navigating
   useEffect(() => {
     if (role !== "collector") return;
-    const interval = setInterval(() => {
-      if (typeof navigator !== "undefined" && navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (p) => {
-            api("/map/location/fix", {
-              method: "POST",
-              body: {
-                lat: p.coords.latitude,
-                lng: p.coords.longitude,
-                accuracy_m: p.coords.accuracy,
-                speed_mps: p.coords.speed ?? 6.5,
-                heading_deg: p.coords.heading ?? 0,
-                source: "gps",
-                captured_at: p.timestamp,
-              },
-            }).catch(() => {});
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+
+    let lastSent = 0;
+    const sendFix = (coords: GeolocationCoordinates, timestamp: number) => {
+      setUserPos([coords.latitude, coords.longitude]);
+      const now = Date.now();
+      // Throttle server transmission to at most once every 3 seconds to avoid flooding
+      if (now - lastSent >= 3000) {
+        lastSent = now;
+        api("/map/location/fix", {
+          method: "POST",
+          body: {
+            lat: coords.latitude,
+            lng: coords.longitude,
+            accuracy_m: coords.accuracy,
+            speed_mps: coords.speed ?? 0,
+            heading_deg: coords.heading ?? 0,
+            source: "gps",
+            captured_at: timestamp,
+            listing_id: activeListing?.id,
           },
-          () => {},
-          { enableHighAccuracy: false, timeout: 5000, maximumAge: 15000 },
-        );
+        }).catch(() => {});
       }
-    }, 20000);
-    return () => clearInterval(interval);
-  }, [role]);
+    };
+
+    const watchId = navigator.geolocation.watchPosition(
+      (p) => sendFix(p.coords, p.timestamp),
+      (err) => console.warn("GPS watchPosition error:", err),
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 2000,
+      },
+    );
+
+    // Heartbeat fallback interval every 4 seconds in case device is stationary
+    const heartbeat = setInterval(() => {
+      navigator.geolocation.getCurrentPosition(
+        (p) => sendFix(p.coords, p.timestamp),
+        () => {},
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 3000 },
+      );
+    }, 4000);
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+      clearInterval(heartbeat);
+    };
+  }, [role, activeListing?.id]);
 
   // --------------------------------------------------------------------------
   // 4. MAP INITIALIZATION & TILES
@@ -615,9 +640,18 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
         ];
 
         // Collector vehicle position: from real tracking or starting nearby
-        const collectorPos: LatLng = trackingData?.collector
-          ? [trackingData.collector.lat, trackingData.collector.lng]
-          : [sellerPickupPos[0] + 0.012, sellerPickupPos[1] - 0.008];
+        let collectorPos: LatLng | null = null;
+        if (trackingData?.collector) {
+          collectorPos = [trackingData.collector.lat, trackingData.collector.lng];
+        } else if (activeListing?.collector?.id) {
+          const match = nearbyCollectors.find((c) => c.id === activeListing.collector?.id);
+          if (match) {
+            collectorPos = [match.lat, match.lng];
+          }
+        }
+        if (!collectorPos) {
+          collectorPos = sellerPickupPos;
+        }
 
         // Place pickup marker
         const meta = getScrapMeta(activeListing.category);
@@ -719,7 +753,9 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
     userPos,
     destination,
     collectorStops,
-    trackingData?.collector,
+    trackingData?.collector?.lat,
+    trackingData?.collector?.lng,
+    nearbyCollectors,
   ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --------------------------------------------------------------------------
@@ -826,9 +862,12 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
     }, 25);
 
     // Initial vehicle marker placement at real collector position or start of path
-    const startPos = trackingData?.collector
-      ? ([trackingData.collector.lat, trackingData.collector.lng] as LatLng)
-      : path[0]!;
+    const startPos: LatLng =
+      role === "collector"
+        ? userPos
+        : trackingData?.collector
+          ? [trackingData.collector.lat, trackingData.collector.lng]
+          : path[0] || userPos;
 
     const vehiclePopupHtml = `<b>${role === "seller" ? (activeListing?.collector?.display_name ?? "Scrap Collector") : (user?.display_name ?? "Collection Vehicle")}</b><br/>${activeListing?.status === "on_the_way" ? "Live En Route" : "Collector Assigned"}${
       role === "seller" && activeListing?.collector?.id
@@ -848,17 +887,32 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
       vehicle.current.setPopupContent(vehiclePopupHtml);
     }
 
-    m.fitBounds(L.latLngBounds(path), {
+    m.fitBounds(L.latLngBounds(path.length ? path : [startPos]), {
       paddingTopLeft: [60, 60],
       paddingBottomRight: [window.innerWidth >= 1024 ? 400 : 40, 100],
     });
 
     return () => clearInterval(t);
-  }, [routes, activeRoute, isTrackingActive, role, collectorStops.length, trackingData?.collector]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [
+    routes,
+    activeRoute,
+    isTrackingActive,
+    role,
+    collectorStops.length,
+    trackingData?.collector,
+    userPos,
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Update vehicle position strictly when real collector GPS data arrives (No fake timer simulation!)
   useEffect(() => {
     if (!vehicle.current) return;
+    if (role === "collector") {
+      vehicle.current.setLatLng(userPos);
+      if (follow && map.current) {
+        map.current.panTo(userPos, { animate: true, duration: 0.5 });
+      }
+      return;
+    }
     if (trackingData?.collector) {
       const realPos: LatLng = [trackingData.collector.lat, trackingData.collector.lng];
       vehicle.current.setLatLng(realPos);
@@ -869,7 +923,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
         map.current.panTo(realPos, { animate: true, duration: 0.5 });
       }
     }
-  }, [trackingData?.collector, follow]);
+  }, [role, userPos, trackingData?.collector, follow]);
 
   // --------------------------------------------------------------------------
   // 10. REAL STATUS TEXT & STEPS
@@ -1220,9 +1274,11 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
           follow={follow}
           setFollow={setFollow}
           vehiclePos={
-            trackingData?.collector
-              ? [trackingData.collector.lat, trackingData.collector.lng]
-              : path[0]
+            role === "collector"
+              ? userPos
+              : trackingData?.collector
+                ? [trackingData.collector.lat, trackingData.collector.lng]
+                : path[0] || userPos
           }
           userPos={userPos}
         />
@@ -1236,9 +1292,11 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
           follow={follow}
           setFollow={setFollow}
           vehiclePos={
-            trackingData?.collector
-              ? [trackingData.collector.lat, trackingData.collector.lng]
-              : path[0]
+            role === "collector"
+              ? userPos
+              : trackingData?.collector
+                ? [trackingData.collector.lat, trackingData.collector.lng]
+                : path[0] || userPos
           }
           userPos={userPos}
           isMobile={true}
