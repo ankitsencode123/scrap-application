@@ -434,18 +434,23 @@ def _mark_read_sync(reader_id: uuid.UUID, listing_id: uuid.UUID, peer_id: uuid.U
         s_db, *_ = _load_pair(db, listing_id, reader_id, peer_id, require_open=False)
         now = utcnow()
         for attempt in (1, 2):  # second pass handles a concurrent first-insert race
-            row = s_db.get(ChatReadState, (listing_id, reader_id, peer_id))
-            if row:
-                row.last_read_at = now
-            else:
-                s_db.add(ChatReadState(listing_id=listing_id, reader_id=reader_id, peer_id=peer_id, last_read_at=now))
             try:
+                row = s_db.get(ChatReadState, (listing_id, reader_id, peer_id))
+                if row:
+                    row.last_read_at = now
+                else:
+                    s_db.add(ChatReadState(listing_id=listing_id, reader_id=reader_id, peer_id=peer_id, last_read_at=now))
                 s_db.commit()
                 return now
             except IntegrityError:
                 s_db.rollback()
                 if attempt == 2:
                     raise
+            except Exception as exc:
+                s_db.rollback()
+                log.warning("_mark_read_sync warning on attempt %d: %s", attempt, exc)
+                if attempt == 2:
+                    return now
         return now  # pragma: no cover
 
 
@@ -1434,25 +1439,34 @@ def chat_unread(user: CurrentUser):
     """Unread message counts per (listing, peer) across all shards."""
 
     def probe(s_db: Any, _sid: Any) -> list[tuple[uuid.UUID, uuid.UUID, int]]:
-        stmt = (
-            select(Message.listing_id, Message.sender_id, func.count(Message.id))
-            .outerjoin(
-                ChatReadState,
-                and_(
-                    ChatReadState.listing_id == Message.listing_id,
-                    ChatReadState.reader_id == Message.recipient_id,
-                    ChatReadState.peer_id == Message.sender_id,
-                ),
+        try:
+            stmt = (
+                select(Message.listing_id, Message.sender_id, func.count(Message.id))
+                .outerjoin(
+                    ChatReadState,
+                    and_(
+                        ChatReadState.listing_id == Message.listing_id,
+                        ChatReadState.reader_id == Message.recipient_id,
+                        ChatReadState.peer_id == Message.sender_id,
+                    ),
+                )
+                .where(
+                    Message.recipient_id == user.id,
+                    or_(ChatReadState.last_read_at.is_(None), Message.created_at > ChatReadState.last_read_at),
+                )
+                .group_by(Message.listing_id, Message.sender_id)
             )
-            .where(
-                Message.recipient_id == user.id,
-                or_(ChatReadState.last_read_at.is_(None), Message.created_at > ChatReadState.last_read_at),
-            )
-            .group_by(Message.listing_id, Message.sender_id)
-        )
-        return [(lid, sid, int(n)) for lid, sid, n in s_db.execute(stmt)]
+            return [(lid, sid, int(n)) for lid, sid, n in s_db.execute(stmt)]
+        except Exception as exc:
+            log.warning("chat_unread probe failed on shard %s: %s", _sid, exc)
+            return []
 
-    convs = [UnreadItem(listing_id=l, peer_id=p, unread=n) for part in get_router().scatter(probe).values() for l, p, n in part]
+    conv_map: dict[tuple[uuid.UUID, uuid.UUID], int] = {}
+    for part in get_router().scatter(probe).values():
+        for l, p, n in part:
+            conv_map[(l, p)] = conv_map.get((l, p), 0) + n
+
+    convs = [UnreadItem(listing_id=l, peer_id=p, unread=n) for (l, p), n in conv_map.items() if n > 0]
     convs.sort(key=lambda c: -c.unread)
     return UnreadOut(total=sum(c.unread for c in convs), conversations=convs)
 

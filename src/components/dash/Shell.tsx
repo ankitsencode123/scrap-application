@@ -4,11 +4,16 @@ import type { ReactNode } from "react";
 
 export function Logo() {
   return (
-    <Link to="/home" className="flex items-center gap-0.5 font-display text-xl font-extrabold text-primary">
+    <Link
+      to="/home"
+      className="flex items-center gap-0.5 font-display text-xl font-extrabold text-primary"
+    >
       scrap<span className="rounded-full bg-sun px-1.5 text-sun-foreground">pe</span>
     </Link>
   );
 }
+
+import { useUnreadChats } from "@/hooks/use-chat-socket";
 
 export function Shell({
   role,
@@ -19,6 +24,9 @@ export function Shell({
   children: ReactNode;
   standalone?: boolean;
 }) {
+  const { data: unreadData } = useUnreadChats();
+  const unreadTotal = unreadData?.total ?? 0;
+
   if (!standalone) {
     return <div className="space-y-6 animate-rise">{children}</div>;
   }
@@ -26,7 +34,12 @@ export function Shell({
   const nav = [
     { label: "Home", to: "/home" as const, icon: Home, active: true },
     { label: "Map", to: "/map" as const, icon: Map },
-    { label: "Chats", to: "/chats" as const, icon: MessageCircle, badge: 3 },
+    {
+      label: "Chats",
+      to: "/chats" as const,
+      icon: MessageCircle,
+      badge: unreadTotal > 0 ? unreadTotal : undefined,
+    },
     { label: "Profile", to: "/profile" as const, icon: User },
   ];
 
@@ -37,7 +50,9 @@ export function Shell({
           <Logo />
           <div className="ml-4 hidden flex-1 items-center gap-2 rounded-full border bg-card px-4 py-2 text-sm text-muted-foreground md:flex md:max-w-sm">
             <Search className="h-4 w-4" />
-            {role === "seller" ? "Search pickups, collectors…" : "Search listings, areas, materials…"}
+            {role === "seller"
+              ? "Search pickups, collectors…"
+              : "Search listings, areas, materials…"}
           </div>
           <nav className="ml-auto flex items-center gap-1">
             {nav.map((n) => (
@@ -45,7 +60,9 @@ export function Shell({
                 key={n.label}
                 to={n.to}
                 className={`relative hidden items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium transition sm:flex ${
-                  n.active ? "bg-primary-soft text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  n.active
+                    ? "bg-primary-soft text-primary"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 }`}
               >
                 <n.icon className="h-4 w-4" />
@@ -72,7 +89,11 @@ export function Shell({
                 <Truck className="h-4 w-4" /> Go online
               </Link>
             )}
-            <button className="relative ml-1 grid h-9 w-9 place-items-center rounded-full border bg-card" type="button" aria-label="Notifications">
+            <button
+              className="relative ml-1 grid h-9 w-9 place-items-center rounded-full border bg-card"
+              type="button"
+              aria-label="Notifications"
+            >
               <Bell className="h-4 w-4" />
               <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-destructive" />
             </button>
@@ -144,7 +165,9 @@ export function Stat({
           </span>
         )}
       </div>
-      <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
       <p className="font-display text-2xl font-extrabold">{value}</p>
     </Card>
   );
@@ -206,7 +229,9 @@ export function StatusPill({ s }: { s: string }) {
     cancelled: "Cancelled",
   };
   return (
-    <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${map[s] ?? "bg-muted"}`}>
+    <span
+      className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${map[s] ?? "bg-muted"}`}
+    >
       {labelMap[s] ?? s}
     </span>
   );

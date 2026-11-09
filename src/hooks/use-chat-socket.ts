@@ -1,10 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { getTokens, WS_CHAT_URL, type ApiMessage } from "@/lib/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { api, getTokens, WS_CHAT_URL, type ApiMessage, type UnreadOut } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
+import { playChatChime } from "@/lib/sound";
 
 type TypingState = Record<string, boolean>; // key: `${listing_id}|${user_id}` -> is_typing
 type PresenceState = Record<string, boolean>; // key: user_id -> online
+type SeenWatermarks = Record<string, string>; // key: `${listing_id}|${peer_id}` -> read_at ISO string
+
+/** Global hook for application-wide unread counts across all active chats */
+export function useUnreadChats() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["chat-unread"],
+    queryFn: () => api<UnreadOut>("/chat/unread"),
+    enabled: !!user?.id,
+    refetchInterval: 12000,
+    staleTime: 5000,
+  });
+}
 
 export function useChatSocket(activeListing?: string, activeWith?: string) {
   const { user } = useAuth();
@@ -13,6 +28,11 @@ export function useChatSocket(activeListing?: string, activeWith?: string) {
   const [isConnected, setIsConnected] = useState(false);
   const [typingState, setTypingState] = useState<TypingState>({});
   const [presenceState, setPresenceState] = useState<PresenceState>({});
+  const [lastSeenWatermarks, setLastSeenWatermarks] = useState<SeenWatermarks>({});
+
+  // Visual arrival highlights: recently arrived messages & threads
+  const [arrivedMsgIds, setArrivedMsgIds] = useState<Set<string>>(new Set());
+  const [arrivedThreadKeys, setArrivedThreadKeys] = useState<Set<string>>(new Set());
 
   const activeListingRef = useRef(activeListing);
   activeListingRef.current = activeListing;
@@ -22,17 +42,47 @@ export function useChatSocket(activeListing?: string, activeWith?: string) {
   const pingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const markRead = useCallback((listingId: string, peerId: string) => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(
-        JSON.stringify({
-          type: "message.read",
-          listing_id: listingId,
-          peer_id: peerId,
-        }),
-      );
-    }
-  }, []);
+  const markRead = useCallback(
+    (listingId: string, peerId: string) => {
+      // 1. Send WebSocket frame if connected
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(
+          JSON.stringify({
+            type: "message.read",
+            listing_id: listingId,
+            peer_id: peerId,
+          }),
+        );
+      }
+
+      // 2. HTTP fallback for guarantee
+      api("/chat/read", {
+        method: "POST",
+        body: { listing_id: listingId, peer_id: peerId },
+      }).catch(() => {});
+
+      // 3. Immediately clear local unread count in cache
+      qc.setQueryData<UnreadOut>(["chat-unread"], (old) => {
+        if (!old) return old;
+        const nextConvs = old.conversations.filter(
+          (c) => !(c.listing_id === listingId && c.peer_id === peerId),
+        );
+        return {
+          total: nextConvs.reduce((acc, c) => acc + c.unread, 0),
+          conversations: nextConvs,
+        };
+      });
+
+      // 4. Clear arrival highlight for this thread
+      setArrivedThreadKeys((prev) => {
+        if (!prev.has(`${listingId}|${peerId}`)) return prev;
+        const next = new Set(prev);
+        next.delete(`${listingId}|${peerId}`);
+        return next;
+      });
+    },
+    [qc],
+  );
 
   const watchPresence = useCallback((userIds: string[]) => {
     if (userIds.length > 0 && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -115,6 +165,7 @@ export function useChatSocket(activeListing?: string, activeWith?: string) {
 
         // Immediate sync on connect/reconnect
         qc.invalidateQueries({ queryKey: ["messages"] });
+        qc.invalidateQueries({ queryKey: ["chat-unread"] });
 
         // Start heartbeat ping every 25 seconds
         if (pingTimer.current) clearInterval(pingTimer.current);
@@ -128,13 +179,7 @@ export function useChatSocket(activeListing?: string, activeWith?: string) {
         if (activeWithRef.current) {
           ws.send(JSON.stringify({ type: "presence.watch", user_ids: [activeWithRef.current] }));
           if (activeListingRef.current) {
-            ws.send(
-              JSON.stringify({
-                type: "message.read",
-                listing_id: activeListingRef.current,
-                peer_id: activeWithRef.current,
-              }),
-            );
+            markRead(activeListingRef.current, activeWithRef.current);
           }
         }
       };
@@ -152,6 +197,7 @@ export function useChatSocket(activeListing?: string, activeWith?: string) {
             case "message.new": {
               const newMsg = data.message as ApiMessage;
               if (newMsg && newMsg.id) {
+                // Update messages cache
                 qc.setQueryData<ApiMessage[]>(["messages"], (old = []) => {
                   if (old.some((m) => m.id === newMsg.id)) return old;
                   return [...old, newMsg];
@@ -160,15 +206,67 @@ export function useChatSocket(activeListing?: string, activeWith?: string) {
                   if (old.some((m) => m.id === newMsg.id)) return old;
                   return [...old, newMsg];
                 });
-                qc.invalidateQueries({ queryKey: ["messages"], refetchType: "all" });
 
-                // If currently viewing this conversation, mark read
-                if (
+                const isFromOther = newMsg.sender_id !== user.id;
+                const isCurrentActive =
                   activeListingRef.current === newMsg.listing_id &&
-                  (activeWithRef.current === newMsg.sender_id || activeWithRef.current === newMsg.recipient_id)
-                ) {
-                  const peer = newMsg.sender_id === user.id ? newMsg.recipient_id : newMsg.sender_id;
-                  markRead(newMsg.listing_id, peer);
+                  (activeWithRef.current === newMsg.sender_id ||
+                    activeWithRef.current === newMsg.recipient_id);
+
+                if (isFromOther) {
+                  // Play gentle audio arrival chime
+                  playChatChime();
+
+                  // Highlight message & thread
+                  const threadKey = `${newMsg.listing_id}|${newMsg.sender_id}`;
+                  setArrivedMsgIds((prev) => new Set([...prev, newMsg.id]));
+                  setArrivedThreadKeys((prev) => new Set([...prev, threadKey]));
+
+                  // Auto remove highlight after 6 seconds
+                  setTimeout(() => {
+                    setArrivedMsgIds((prev) => {
+                      const next = new Set(prev);
+                      next.delete(newMsg.id);
+                      return next;
+                    });
+                    setArrivedThreadKeys((prev) => {
+                      const next = new Set(prev);
+                      next.delete(threadKey);
+                      return next;
+                    });
+                  }, 6000);
+
+                  if (isCurrentActive) {
+                    // Mark as read immediately since user is actively on this screen
+                    markRead(newMsg.listing_id, newMsg.sender_id);
+                  } else {
+                    // Increment unread count in ["chat-unread"]
+                    qc.setQueryData<UnreadOut>(["chat-unread"], (old) => {
+                      const convs = old?.conversations ? [...old.conversations] : [];
+                      const idx = convs.findIndex(
+                        (c) => c.listing_id === newMsg.listing_id && c.peer_id === newMsg.sender_id,
+                      );
+                      if (idx >= 0) {
+                        convs[idx] = { ...convs[idx], unread: convs[idx].unread + 1 };
+                      } else {
+                        convs.push({
+                          listing_id: newMsg.listing_id,
+                          peer_id: newMsg.sender_id,
+                          unread: 1,
+                        });
+                      }
+                      return {
+                        total: (old?.total ?? 0) + 1,
+                        conversations: convs,
+                      };
+                    });
+
+                    // Toast notification for incoming chat
+                    toast.info(`New message from ${newMsg.sender_name}`, {
+                      description: newMsg.body,
+                      duration: 4500,
+                    });
+                  }
                 }
               }
               break;
@@ -178,7 +276,9 @@ export function useChatSocket(activeListing?: string, activeWith?: string) {
               const clientId = data.client_id as string | undefined;
               if (ackMsg && ackMsg.id) {
                 qc.setQueryData<ApiMessage[]>(["messages"], (old = []) => {
-                  const idx = old.findIndex((m) => (clientId && m.id === clientId) || m.id === ackMsg.id);
+                  const idx = old.findIndex(
+                    (m) => (clientId && m.id === clientId) || m.id === ackMsg.id,
+                  );
                   if (idx !== -1) {
                     const copy = [...old];
                     copy[idx] = ackMsg;
@@ -188,7 +288,9 @@ export function useChatSocket(activeListing?: string, activeWith?: string) {
                   return [...old, ackMsg];
                 });
                 qc.setQueriesData<ApiMessage[]>({ queryKey: ["messages"] }, (old = []) => {
-                  const idx = old.findIndex((m) => (clientId && m.id === clientId) || m.id === ackMsg.id);
+                  const idx = old.findIndex(
+                    (m) => (clientId && m.id === clientId) || m.id === ackMsg.id,
+                  );
                   if (idx !== -1) {
                     const copy = [...old];
                     copy[idx] = ackMsg;
@@ -197,6 +299,34 @@ export function useChatSocket(activeListing?: string, activeWith?: string) {
                   if (old.some((m) => m.id === ackMsg.id)) return old;
                   return [...old, ackMsg];
                 });
+              }
+              break;
+            }
+            case "read": {
+              // Server broadcast: {"type":"read","listing_id":...,"reader_id":...,"peer_id":...,"read_at":...}
+              const listingId = String(data.listing_id);
+              const readerId = String(data.reader_id);
+              const peerId = String(data.peer_id);
+              const readAt = String(data.read_at);
+
+              if (readerId === user.id) {
+                // I read this conversation on another device -> clear unread badge
+                qc.setQueryData<UnreadOut>(["chat-unread"], (old) => {
+                  if (!old) return old;
+                  const nextConvs = old.conversations.filter(
+                    (c) => !(c.listing_id === listingId && c.peer_id === peerId),
+                  );
+                  return {
+                    total: nextConvs.reduce((acc, c) => acc + c.unread, 0),
+                    conversations: nextConvs,
+                  };
+                });
+              } else if (readerId === peerId) {
+                // Peer read my messages -> store seen watermark
+                setLastSeenWatermarks((prev) => ({
+                  ...prev,
+                  [`${listingId}|${peerId}`]: readAt,
+                }));
               }
               break;
             }
@@ -255,11 +385,13 @@ export function useChatSocket(activeListing?: string, activeWith?: string) {
 
     connect();
 
+    const activeTypingTimers = typingTimers.current;
+
     return () => {
       isDestroyed = true;
       if (pingTimer.current) clearInterval(pingTimer.current);
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-      Object.values(typingTimers.current).forEach(clearTimeout);
+      Object.values(activeTypingTimers).forEach(clearTimeout);
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
@@ -281,6 +413,9 @@ export function useChatSocket(activeListing?: string, activeWith?: string) {
     isConnected,
     typingState,
     presenceState,
+    arrivedMsgIds,
+    arrivedThreadKeys,
+    lastSeenWatermarks,
     sendChatMessage,
     startTyping,
     stopTyping,

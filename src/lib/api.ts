@@ -221,6 +221,17 @@ export type ApiMessage = {
   created_at: string;
 };
 
+export type UnreadItem = {
+  listing_id: string;
+  peer_id: string;
+  unread: number;
+};
+
+export type UnreadOut = {
+  total: number;
+  conversations: UnreadItem[];
+};
+
 export type Page<T> = {
   items: T[];
   total?: number | null;

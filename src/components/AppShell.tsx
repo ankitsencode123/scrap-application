@@ -2,6 +2,7 @@ import { Link, useLocation } from "@tanstack/react-router";
 import { Home, Map, MessageCircle, Plus, User } from "lucide-react";
 import type { ReactNode } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { useUnreadChats } from "@/hooks/use-chat-socket";
 import { cn } from "@/lib/utils";
 import { UserAvatar } from "@/components/UserAvatar";
 
@@ -24,6 +25,9 @@ export function Logo() {
 export function AppShell({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const { profile } = useAuth();
+  const { data: unreadData } = useUnreadChats();
+  const unreadTotal = unreadData?.total ?? 0;
+
   const isCollector = profile?.role === "collector";
   const items = NAV.filter((n) => !(isCollector && n.to === "/sell"));
 
@@ -40,7 +44,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 key={n.to}
                 to={n.to}
                 className={cn(
-                  "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition",
+                  "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition relative",
                   n.to === "/sell"
                     ? "bg-sun font-semibold text-sun-foreground shadow-soft hover:brightness-105"
                     : pathname.startsWith(n.to)
@@ -56,7 +60,14 @@ export function AppShell({ children }: { children: ReactNode }) {
                     fallbackClassName="size-4 text-[9px]"
                   />
                 ) : (
-                  <n.icon className="size-4" />
+                  <div className="relative">
+                    <n.icon className="size-4" />
+                    {n.to === "/chats" && unreadTotal > 0 && (
+                      <span className="absolute -top-1.5 -right-2 flex size-3.5 items-center justify-center rounded-full bg-emerald-600 text-[9px] font-extrabold text-white shadow-sm ring-1 ring-background animate-pulse">
+                        {unreadTotal > 9 ? "9+" : unreadTotal}
+                      </span>
+                    )}
+                  </div>
                 )}
                 {n.to === "/sell" ? "Sell scrap" : n.label}
               </Link>
@@ -106,7 +117,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 key={n.to}
                 to={n.to}
                 className={cn(
-                  "flex min-w-14 flex-col items-center gap-1 py-1 text-[11px] font-medium",
+                  "flex min-w-14 flex-col items-center gap-1 py-1 text-[11px] font-medium relative",
                   active ? "text-primary" : "text-muted-foreground",
                 )}
               >
@@ -118,7 +129,14 @@ export function AppShell({ children }: { children: ReactNode }) {
                     fallbackClassName={cn("size-5 text-[10px]", active && "ring-2 ring-primary")}
                   />
                 ) : (
-                  <n.icon className={cn("size-5", active && "stroke-[2.5]")} />
+                  <div className="relative">
+                    <n.icon className={cn("size-5", active && "stroke-[2.5]")} />
+                    {n.to === "/chats" && unreadTotal > 0 && (
+                      <span className="absolute -top-1 -right-2 flex size-4 items-center justify-center rounded-full bg-emerald-600 text-[9px] font-extrabold text-white shadow-sm ring-1 ring-background animate-pulse">
+                        {unreadTotal > 9 ? "9+" : unreadTotal}
+                      </span>
+                    )}
+                  </div>
                 )}
                 {n.label}
               </Link>
