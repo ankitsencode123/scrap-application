@@ -85,7 +85,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         name: "viewport",
         content:
-          "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no",
+          "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no, interactive-widget=resizes-content",
       },
       { title: "scrappe — Sell your scrap from home" },
       {

@@ -44,6 +44,32 @@ function formatMessageTime(iso?: string): string {
   }
 }
 
+function useVisualViewportHeight() {
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.visualViewport) return;
+
+    const onResize = () => {
+      if (window.visualViewport) {
+        setViewportHeight(window.visualViewport.height);
+      }
+    };
+
+    const vv = window.visualViewport;
+    vv.addEventListener("resize", onResize);
+    vv.addEventListener("scroll", onResize);
+    onResize();
+
+    return () => {
+      vv.removeEventListener("resize", onResize);
+      vv.removeEventListener("scroll", onResize);
+    };
+  }, []);
+
+  return viewportHeight;
+}
+
 export const Route = createFileRoute("/_authenticated/chats")({
   validateSearch: (s: Record<string, unknown>): Search => ({
     listing: typeof s["listing"] === "string" ? s["listing"] : undefined,
@@ -307,13 +333,27 @@ function ChatsPage() {
     );
   }
 
+  const viewportHeight = useVisualViewportHeight();
+
   return (
-    <div className="grid h-[calc(100vh-11rem)] gap-4 md:h-[calc(100vh-7rem)] md:grid-cols-[330px_1fr]">
+    <div
+      className={cn(
+        "w-full transition-all duration-150",
+        open
+          ? "fixed inset-x-0 top-16 bottom-0 z-30 flex flex-col bg-card md:static md:inset-auto md:h-[calc(100dvh-7rem)] md:grid md:grid-cols-[330px_1fr] md:gap-4 md:bg-transparent"
+          : "h-[calc(100dvh-4rem-4.5rem)] flex flex-col md:h-[calc(100dvh-7rem)] md:grid md:grid-cols-[330px_1fr] md:gap-4",
+      )}
+      style={
+        open && viewportHeight && typeof window !== "undefined" && window.innerWidth < 768
+          ? { height: `${viewportHeight - 64}px` }
+          : undefined
+      }
+    >
       {/* -------------------- SIDEBAR: THREADS & MESSAGE COUNTS -------------------- */}
       <aside
         className={cn(
-          "flex flex-col overflow-hidden rounded-3xl border bg-card shadow-soft",
-          open && "hidden md:flex",
+          "flex flex-col overflow-hidden bg-card md:rounded-3xl md:border md:shadow-soft",
+          open ? "hidden md:flex" : "h-full w-full",
         )}
       >
         {/* Header & Connection status */}
@@ -515,8 +555,8 @@ function ChatsPage() {
       {/* -------------------- MAIN: ACTIVE CHAT THREAD -------------------- */}
       <section
         className={cn(
-          "flex min-h-0 flex-col rounded-3xl border bg-card shadow-soft overflow-hidden",
-          !open && "hidden md:flex",
+          "flex min-h-0 flex-col bg-card overflow-hidden md:rounded-3xl md:border md:shadow-soft",
+          !open ? "hidden md:flex" : "h-full w-full",
         )}
       >
         {open ? (
@@ -723,9 +763,14 @@ function Thread({
   return (
     <>
       {/* -------------------- THREAD HEADER -------------------- */}
-      <div className="flex items-center justify-between border-b px-4 py-3 bg-card/60 backdrop-blur z-10">
-        <div className="flex items-center gap-3 min-w-0">
-          <Button variant="ghost" size="icon" className="md:hidden shrink-0 -ml-2" onClick={onBack}>
+      <div className="sticky top-0 z-20 flex items-center justify-between border-b px-3.5 py-2.5 bg-card/95 backdrop-blur shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden size-9 shrink-0 -ml-1 text-muted-foreground hover:text-foreground"
+            onClick={onBack}
+          >
             <ArrowLeft className="size-5" />
           </Button>
           <UserAvatar
@@ -789,7 +834,7 @@ function Thread({
       <div
         ref={scrollContainer}
         onScroll={handleScroll}
-        className="flex-1 space-y-3 overflow-y-auto p-4 relative"
+        className="flex-1 min-h-0 space-y-3 overflow-y-auto overscroll-contain p-4 relative"
       >
         {loadingMsgs && msgs.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
@@ -897,7 +942,7 @@ function Thread({
 
       {/* -------------------- MESSAGE INPUT FORM -------------------- */}
       <form
-        className="flex gap-2 border-t p-3 bg-card"
+        className="sticky bottom-0 z-20 flex items-center gap-2 border-t p-2.5 bg-card shrink-0 pb-[max(0.625rem,env(safe-area-inset-bottom))]"
         onSubmit={(e) => {
           e.preventDefault();
           send();
@@ -906,19 +951,25 @@ function Thread({
         <Input
           value={text}
           onChange={handleChange}
+          onFocus={() => {
+            if (typeof window !== "undefined") {
+              window.scrollTo(0, 0);
+              setTimeout(() => scrollToBottom(true), 150);
+            }
+          }}
           onBlur={() => {
             if (typingTimer.current) clearTimeout(typingTimer.current);
             onStopTyping(listing, other);
           }}
           placeholder={`Message ${peerName}…`}
-          className="rounded-full px-4"
+          className="rounded-full px-4 h-11 bg-muted/40 focus-visible:bg-background text-base md:text-sm shadow-none"
           autoFocus
         />
         <Button
           type="submit"
           size="icon"
           disabled={!text.trim()}
-          className="rounded-full shrink-0 shadow-soft"
+          className="size-11 rounded-full shrink-0 shadow-soft bg-primary text-primary-foreground hover:brightness-105 transition"
         >
           <Send className="size-4" />
         </Button>

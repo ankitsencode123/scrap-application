@@ -23,7 +23,12 @@ export function Logo() {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { pathname } = useLocation();
+  const location = useLocation();
+  const pathname = location.pathname;
+  const search = location.search as Record<string, unknown> | undefined;
+  const isChat = pathname === "/chats";
+  const isChatThreadOpen = isChat && Boolean(search?.["listing"] || search?.["with"]);
+
   const { profile } = useAuth();
   const { data: unreadData } = useUnreadChats();
   const unreadTotal = unreadData?.total ?? 0;
@@ -32,7 +37,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const items = NAV.filter((n) => !(isCollector && n.to === "/sell"));
 
   return (
-    <div className="min-h-screen pb-24 md:pb-0">
+    <div
+      className={cn("min-h-screen", isChat ? "pb-0 md:pb-0 overflow-x-hidden" : "pb-24 md:pb-0")}
+    >
       <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur pt-safe">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
           <Link to="/home">
@@ -97,9 +104,22 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">{children}</main>
+      <main
+        className={cn(
+          isChat
+            ? "p-0 md:px-6 md:py-6 max-w-none md:max-w-7xl mx-auto"
+            : "mx-auto max-w-7xl px-4 py-6 sm:px-6",
+        )}
+      >
+        {children}
+      </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-card/95 backdrop-blur pb-safe md:hidden">
+      <nav
+        className={cn(
+          "fixed inset-x-0 bottom-0 z-40 border-t bg-card/95 backdrop-blur pb-safe md:hidden",
+          isChatThreadOpen && "hidden",
+        )}
+      >
         <div className="mx-auto flex max-w-md items-end justify-around px-2 pt-2">
           {items.map((n) => {
             const active = pathname.startsWith(n.to);

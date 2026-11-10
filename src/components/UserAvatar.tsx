@@ -5,14 +5,14 @@ import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface UserAvatarProps {
-  src?: string | null;
-  name?: string | null;
-  className?: string;
-  fallbackClassName?: string;
-  iconClassName?: string;
-  textClassName?: string;
-  previewable?: boolean;
-  onClick?: (e: React.MouseEvent) => void;
+  src?: string | null | undefined;
+  name?: string | null | undefined;
+  className?: string | undefined;
+  fallbackClassName?: string | undefined;
+  iconClassName?: string | undefined;
+  textClassName?: string | undefined;
+  previewable?: boolean | undefined;
+  onClick?: ((e: React.MouseEvent) => void) | undefined;
 }
 
 export function UserAvatar({
