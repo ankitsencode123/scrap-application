@@ -164,7 +164,12 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
   const [activeRoute, setActiveRoute] = useState(0);
   const [progress, setProgress] = useState(0);
   const [follow, setFollow] = useState(true);
-  const [sheetOpen, setSheetOpen] = useState(true);
+  const [sheetOpen, setSheetOpen] = useState(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      return false;
+    }
+    return true;
+  });
   const [legendOpen, setLegendOpen] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -440,11 +445,19 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
   useEffect(() => {
     if (!mapEl.current || map.current) return;
 
-    const m = L.map(mapEl.current, { zoomControl: false, attributionControl: true }).setView(
-      userPos,
-      14,
-    );
+    const m = L.map(mapEl.current, {
+      zoomControl: false,
+      attributionControl: true,
+      tap: false,
+      touchZoom: true,
+      dragging: true,
+      bounceAtZoomLimits: false,
+    }).setView(userPos, 14);
     map.current = m;
+
+    m.touchZoom?.enable();
+    m.dragging?.enable();
+
     tile.current = L.tileLayer(TILES.normal.url, {
       attribution: TILES.normal.attr,
       maxZoom: 19,
@@ -460,9 +473,14 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
     const centresGroup = L.layerGroup();
     overlayGroups.current = { heat, density, nearby, centres: centresGroup };
 
-    m.on("dragstart", () => setFollow(false));
+    const stopFollowing = () => setFollow(false);
+    m.on("dragstart zoomstart movestart", stopFollowing);
+
+    const mapContainer = m.getContainer();
+    mapContainer.addEventListener("touchstart", stopFollowing, { passive: true });
 
     return () => {
+      mapContainer.removeEventListener("touchstart", stopFollowing);
       m.remove();
       map.current = null;
     };
@@ -1040,9 +1058,9 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
       </div>
 
       {/* Top-left: Search + Role Badge + Live Status Chips */}
-      <div className="absolute left-4 top-4 z-[1000] flex max-w-[calc(100%-6rem)] flex-col gap-2 lg:max-w-md">
+      <div className="pointer-events-none absolute left-4 top-4 z-[1000] flex max-w-[calc(100%-6rem)] flex-col gap-2 lg:max-w-md">
         {/* Authenticated Profile Role Badge */}
-        <div className="glass-panel flex items-center gap-2.5 rounded-2xl px-3.5 py-2 w-fit shadow-soft">
+        <div className="glass-panel pointer-events-auto flex items-center gap-2.5 rounded-2xl px-3.5 py-2 w-fit shadow-soft">
           <div className="flex size-7 items-center justify-center rounded-xl bg-primary text-sm shadow-sm">
             {role === "collector" ? "🛺" : "🏠"}
           </div>
@@ -1067,7 +1085,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
 
         <form
           onSubmit={search}
-          className="glass-panel flex items-center gap-2 rounded-2xl px-3 py-2"
+          className="glass-panel pointer-events-auto flex items-center gap-2 rounded-2xl px-3 py-2"
         >
           <Search className="h-4 w-4 text-muted-foreground" />
           <input
@@ -1078,7 +1096,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
           />
         </form>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="pointer-events-auto flex flex-wrap gap-2">
           <span className="glass-panel flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold text-destructive">
             <span className="h-2 w-2 rounded-full bg-destructive animate-live" /> LIVE GPS
           </span>
@@ -1342,10 +1360,14 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
       >
         <button
           onClick={() => setSheetOpen((v) => !v)}
-          className="flex w-full flex-col items-center pt-2 lg:hidden"
-          aria-label="Toggle details"
+          className="flex w-full flex-col items-center py-2 active:opacity-70 lg:hidden cursor-pointer"
+          aria-label="Toggle pickup details sheet"
+          title={sheetOpen ? "Collapse details to view map" : "Expand pickup details"}
         >
-          <span className="h-1.5 w-10 rounded-full bg-border" />
+          <span className="h-1.5 w-12 rounded-full bg-muted-foreground/40 shadow-xs" />
+          <span className="mt-0.5 text-[10px] font-semibold text-muted-foreground">
+            {sheetOpen ? "Tap to view full map" : "Tap to view pickup details"}
+          </span>
         </button>
 
         {/* Panel Header with Live ETA & Status */}
@@ -1832,25 +1854,31 @@ function ZoomStack({
 }) {
   return (
     <>
-      {!isMobile && (
-        <div className="glass-panel flex flex-col overflow-hidden rounded-2xl">
-          <button
-            onClick={() => map.current?.zoomIn()}
-            className="grid h-10 w-10 place-items-center hover:bg-muted"
-            aria-label="Zoom in"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-          <div className="h-px bg-border" />
-          <button
-            onClick={() => map.current?.zoomOut()}
-            className="grid h-10 w-10 place-items-center hover:bg-muted"
-            aria-label="Zoom out"
-          >
-            <Minus className="h-4 w-4" />
-          </button>
-        </div>
-      )}
+      <div className="glass-panel flex flex-col overflow-hidden rounded-2xl shadow-float">
+        <button
+          onClick={() => {
+            setFollow(false);
+            map.current?.zoomIn();
+          }}
+          className="grid h-10 w-10 place-items-center hover:bg-muted active:scale-95 transition"
+          aria-label="Zoom in"
+          title="Zoom in"
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+        <div className="h-px bg-border" />
+        <button
+          onClick={() => {
+            setFollow(false);
+            map.current?.zoomOut();
+          }}
+          className="grid h-10 w-10 place-items-center hover:bg-muted active:scale-95 transition"
+          aria-label="Zoom out"
+          title="Zoom out"
+        >
+          <Minus className="h-4 w-4" />
+        </button>
+      </div>
       <RailBtn
         label="Recenter on me"
         onClick={() => {

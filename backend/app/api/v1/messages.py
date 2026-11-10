@@ -16,6 +16,37 @@ from app.schemas import MessageCreate, MessageOut
 messages_router = APIRouter(prefix="/messages", tags=["Messages"])
 
 
+from datetime import datetime, timezone
+
+def _sort_ts(dt: object) -> float:
+    if not dt:
+        return 0.0
+    if isinstance(dt, (int, float)):
+        return float(dt)
+    if isinstance(dt, str):
+        try:
+            dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+        except Exception:
+            return 0.0
+    if isinstance(dt, datetime):
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.timestamp()
+    return 0.0
+
+
+def _to_utc_dt(val: object) -> datetime:
+    if isinstance(val, datetime):
+        return val if val.tzinfo is not None else val.replace(tzinfo=timezone.utc)
+    if isinstance(val, str):
+        try:
+            dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
+            return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            pass
+    return datetime.now(timezone.utc)
+
+
 def message_out(m: Message, sender: User | None = None, recipient: User | None = None) -> MessageOut:
     return MessageOut(
         id=m.id,
@@ -26,7 +57,7 @@ def message_out(m: Message, sender: User | None = None, recipient: User | None =
         recipient_id=m.recipient_id,
         recipient_name=recipient.display_name if recipient else "",
         body=m.body,
-        created_at=m.created_at,
+        created_at=_to_utc_dt(m.created_at),
     )
 
 
@@ -48,7 +79,7 @@ def my_messages(
         res = router.scatter(
             lambda s_db, sid: list(s_db.scalars(select(Message).where(*filters).order_by(Message.created_at.desc()).limit(limit)))
         )
-        rows = merge_page(res.values(), key=lambda m: m.created_at.timestamp(), limit=limit, offset=0, reverse=True)
+        rows = merge_page(res.values(), key=lambda m: _sort_ts(m.created_at), limit=limit, offset=0, reverse=True)
 
     user_ids = {m.sender_id for m in rows} | {m.recipient_id for m in rows}
     users = get_router().load_by_ids(User, user_ids)
@@ -80,7 +111,7 @@ def my_messages(
                             recipient_id=uuid.UUID(sm["recipient_id"]) if len(sm.get("recipient_id", "")) == 36 else user.id,
                             recipient_name=sm.get("recipient_name") or "",
                             body=sm.get("body") or "",
-                            created_at=sm.get("created_at"),
+                            created_at=_to_utc_dt(sm.get("created_at")),
                         )
                     )
                     existing_ids.add(m_id)
@@ -89,7 +120,7 @@ def my_messages(
     except Exception:
         pass
 
-    return sorted(out, key=lambda x: x.created_at)
+    return sorted(out, key=lambda x: _sort_ts(x.created_at))
 
 
 @messages_router.post("", response_model=MessageOut, status_code=201)

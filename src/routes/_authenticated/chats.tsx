@@ -62,6 +62,35 @@ export const Route = createFileRoute("/_authenticated/chats")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
+  errorComponent: ({ error, reset }) => (
+    <div className="flex min-h-[400px] flex-col items-center justify-center gap-4 rounded-3xl border bg-card p-8 text-center shadow-soft">
+      <div className="grid size-14 place-items-center rounded-2xl bg-destructive/10 text-destructive">
+        <WifiOff className="size-7" />
+      </div>
+      <div>
+        <h2 className="text-lg font-bold text-foreground">Unable to load chats</h2>
+        <p className="mt-1 text-sm text-muted-foreground max-w-sm">
+          {error instanceof Error
+            ? error.message
+            : "Something went wrong loading your conversation."}
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        <Button onClick={() => reset()} variant="default" size="sm">
+          Try Again
+        </Button>
+        <Button
+          onClick={() => {
+            window.location.href = "/chats";
+          }}
+          variant="outline"
+          size="sm"
+        >
+          Reset Chats
+        </Button>
+      </div>
+    </div>
+  ),
   component: ChatsPage,
 });
 
@@ -96,28 +125,54 @@ function ChatsPage() {
   // Global unread counters across all threads
   const { data: unreadData } = useUnreadChats();
 
-  const { data: msgs = [], isLoading } = useQuery({
+  const { data: rawMsgs = [], isLoading } = useQuery({
     queryKey: ["messages"],
     refetchInterval: search.with ? 1200 : 3000,
     refetchOnWindowFocus: true,
-    queryFn: () => api<ApiMessage[]>("/messages"),
+    queryFn: () => api<ApiMessage[]>("/messages").catch(() => []),
   });
 
+  const msgs = useMemo(() => {
+    return Array.isArray(rawMsgs)
+      ? rawMsgs.filter((m): m is ApiMessage => Boolean(m && typeof m === "object" && m.id))
+      : [];
+  }, [rawMsgs]);
+
   // User's own listings as fallback to initiate thread if listing is not yet specified
-  const { data: myListings = [] } = useQuery({
+  const { data: myListingsRaw } = useQuery({
     queryKey: ["my-listings-for-chat"],
     enabled: Boolean(search.with && !search.listing),
-    queryFn: () => api<ApiListing[]>("/listings", { query: { scope: "mine" } }).catch(() => []),
+    queryFn: () =>
+      api<{ items?: ApiListing[] } | ApiListing[]>("/listings", {
+        query: { tab: "mine", limit: 30 },
+      }).catch(() => []),
+  });
+
+  const myListings = useMemo(() => {
+    if (!myListingsRaw) return [];
+    if (Array.isArray(myListingsRaw)) return myListingsRaw;
+    if (Array.isArray(myListingsRaw.items)) return myListingsRaw.items;
+    return [];
+  }, [myListingsRaw]);
+
+  // If search.listing is specified without search.with, fetch listing to resolve the other party (seller vs collector)
+  const { data: routeListing } = useQuery({
+    queryKey: ["chatListingRoute", search.listing],
+    enabled: Boolean(search.listing && !search.with),
+    queryFn: () => api<ApiListing>(`/listings/${search.listing}`).catch(() => null),
   });
 
   const threads = useMemo(() => {
     const m = new Map<string, { listing: string; with: string; last: ApiMessage; count: number }>();
     for (const x of msgs) {
+      if (!x) continue;
       const other = x.sender_id === user?.id ? x.recipient_id : x.sender_id;
-      const key = `${x.listing_id}|${other}`;
+      if (!other) continue;
+      const lId = x.listing_id || "general";
+      const key = `${lId}|${other}`;
       const existing = m.get(key);
       m.set(key, {
-        listing: x.listing_id,
+        listing: lId,
         with: other,
         last: x,
         count: (existing?.count ?? 0) + 1,
@@ -140,9 +195,10 @@ function ChatsPage() {
   const names = new Map<string, string>();
   const titles = new Map<string, string>();
   for (const x of msgs) {
-    names.set(x.sender_id, x.sender_name);
-    names.set(x.recipient_id, x.recipient_name);
-    titles.set(x.listing_id, x.listing_title);
+    if (!x) continue;
+    if (x.sender_id && x.sender_name) names.set(x.sender_id, x.sender_name);
+    if (x.recipient_id && x.recipient_name) names.set(x.recipient_id, x.recipient_name);
+    if (x.listing_id && x.listing_title) titles.set(x.listing_id, x.listing_title);
   }
   const newThread = Boolean(search.listing && search.with && !titles.has(search.listing));
   const { data: newPerson } = useQuery({
@@ -158,11 +214,15 @@ function ChatsPage() {
   const name = (id: string) =>
     names.get(id) ?? (id === search.with ? newPerson?.display_name : undefined) ?? "User";
   const title = (id: string) =>
-    titles.get(id) ?? (id === search.listing ? newListing?.title : undefined) ?? "Listing";
+    titles.get(id) ??
+    (id === search.listing ? newListing?.title : undefined) ??
+    (id === search.listing && routeListing ? routeListing.title : undefined) ??
+    "Listing";
 
   const open = Boolean(search.listing && search.with);
   const convo = msgs.filter(
     (m) =>
+      m &&
       m.listing_id === search.listing &&
       (m.sender_id === search.with || m.recipient_id === search.with),
   );
@@ -173,18 +233,34 @@ function ChatsPage() {
 
   // Auto-resolve single parameter searches to immediately open the specific chat thread
   useEffect(() => {
-    if (search.listing && !search.with && msgs.length > 0) {
-      const match = msgs.find((m) => m.listing_id === search.listing);
+    if (search.listing && !search.with) {
+      const match = msgs.find((m) => m && m.listing_id === search.listing);
       if (match) {
         const other = match.sender_id === user?.id ? match.recipient_id : match.sender_id;
-        navigate({
-          to: "/chats",
-          search: { listing: search.listing, with: other },
-          replace: true,
-        });
+        if (other) {
+          navigate({
+            to: "/chats",
+            search: { listing: search.listing, with: other },
+            replace: true,
+          });
+          return;
+        }
+      }
+      if (routeListing && user?.id) {
+        const peer =
+          routeListing.seller_id === user.id ? routeListing.collector?.id : routeListing.seller_id;
+        if (peer) {
+          navigate({
+            to: "/chats",
+            search: { listing: search.listing, with: peer },
+            replace: true,
+          });
+        }
       }
     } else if (search.with && !search.listing) {
-      const match = msgs.find((m) => m.sender_id === search.with || m.recipient_id === search.with);
+      const match = msgs.find(
+        (m) => m && (m.sender_id === search.with || m.recipient_id === search.with),
+      );
       if (match) {
         navigate({
           to: "/chats",
@@ -200,7 +276,7 @@ function ChatsPage() {
         });
       }
     }
-  }, [search.listing, search.with, msgs, myListings, user?.id, navigate]);
+  }, [search.listing, search.with, msgs, myListings, routeListing, user?.id, navigate]);
 
   const totalUnreadCount = unreadData?.total ?? 0;
 
@@ -670,13 +746,22 @@ function Thread({
                 {isPeerOnline ? "Active now" : "Offline"}
               </span>
             </div>
-            <Link
-              to="/listings/$id"
-              params={{ id: listing }}
-              className="truncate block text-xs text-primary font-medium hover:underline"
-            >
-              📦 {listingTitle}
-            </Link>
+            {listing &&
+            listing !== "undefined" &&
+            listing !== "general" &&
+            listing.trim() !== "" ? (
+              <Link
+                to="/listings/$id"
+                params={{ id: listing }}
+                className="truncate block text-xs text-primary font-medium hover:underline"
+              >
+                📦 {listingTitle || "Listing"}
+              </Link>
+            ) : (
+              <span className="truncate block text-xs text-muted-foreground font-medium">
+                💬 {listingTitle || "Direct Conversation"}
+              </span>
+            )}
           </div>
         </div>
 
