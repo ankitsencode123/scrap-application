@@ -44,6 +44,24 @@ function formatMessageTime(iso?: string): string {
   }
 }
 
+function isSameDay(d1: Date, d2: Date) {
+  return (
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate()
+  );
+}
+
+function formatDateSeparator(iso: string) {
+  const d = new Date(iso);
+  const now = new Date();
+  if (isSameDay(d, now)) return "Today";
+  const yesterday = new Date();
+  yesterday.setDate(now.getDate() - 1);
+  if (isSameDay(d, yesterday)) return "Yesterday";
+  return d.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
 function useVisualViewportHeight() {
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
 
@@ -834,7 +852,7 @@ function Thread({
       <div
         ref={scrollContainer}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 space-y-3 overflow-y-auto overscroll-contain p-4 relative"
+        className="flex-1 min-h-0 space-y-1.5 overflow-y-auto overscroll-contain p-3.5 relative bg-muted/15 dark:bg-background"
       >
         {loadingMsgs && msgs.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
@@ -852,9 +870,12 @@ function Thread({
             </p>
           </div>
         ) : (
-          msgs.map((m) => {
+          msgs.map((m, idx) => {
             const isMe = m.sender_id === me;
             const isArrived = arrivedMsgIds.has(m.id);
+
+            const prev = idx > 0 ? msgs[idx - 1] : null;
+            const showDate = !prev || !isSameDay(new Date(prev.created_at), new Date(m.created_at));
 
             // Calculate seen status for sender messages
             const isSeen =
@@ -863,53 +884,64 @@ function Thread({
               new Date(peerSeenWatermark).getTime() >= new Date(m.created_at).getTime();
 
             return (
-              <div
-                key={m.id}
-                className={cn(
-                  "relative max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm transition-all duration-500",
-                  isMe
-                    ? "ml-auto bg-primary text-primary-foreground rounded-br-sm shadow-soft"
-                    : "mr-auto bg-secondary text-secondary-foreground rounded-bl-sm border shadow-xs",
-                  // FLASH HIGHLIGHT WHEN CHAT ARRIVES
-                  isArrived &&
-                    !isMe &&
-                    "ring-2 ring-emerald-500 shadow-lg shadow-emerald-500/20 bg-emerald-50 dark:bg-emerald-950/40 animate-in fade-in zoom-in-95 duration-500",
+              <div key={m.id} className="space-y-1.5">
+                {showDate && (
+                  <div className="flex justify-center my-2">
+                    <span className="rounded-full bg-card/90 px-3 py-0.5 text-[11px] font-semibold text-muted-foreground shadow-xs border border-border/50 select-none">
+                      {formatDateSeparator(m.created_at)}
+                    </span>
+                  </div>
                 )}
-              >
-                {/* Arrival highlight indicator badge */}
-                {isArrived && !isMe && (
-                  <span className="absolute -top-2 left-2 flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-white shadow-sm animate-pulse">
-                    New
-                  </span>
-                )}
-
-                <div className="whitespace-pre-wrap break-words leading-relaxed font-normal">
-                  {m.body}
-                </div>
 
                 <div
                   className={cn(
-                    "mt-1 flex items-center justify-end gap-1 text-[10px]",
-                    isMe ? "text-primary-foreground/75" : "text-muted-foreground",
+                    "relative max-w-[85%] sm:max-w-[72%] rounded-2xl px-3 py-1.5 text-[13.5px] transition-all duration-300",
+                    isMe
+                      ? "ml-auto bg-primary text-primary-foreground rounded-tr-xs shadow-xs"
+                      : "mr-auto bg-card text-foreground rounded-tl-xs border border-border/70 shadow-xs",
+                    isArrived &&
+                      !isMe &&
+                      "ring-1 ring-emerald-500/70 bg-emerald-50/70 dark:bg-emerald-950/40 animate-in fade-in zoom-in-[0.98] duration-300",
                   )}
                 >
-                  <span>
-                    {new Date(m.created_at).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-2.5 gap-y-0.5">
+                    <span className="whitespace-pre-wrap break-words leading-relaxed font-normal">
+                      {isArrived && !isMe && (
+                        <span className="inline-block text-[10px] font-bold text-emerald-600 dark:text-emerald-400 mr-1 select-none">
+                          ● NEW
+                        </span>
+                      )}
+                      {m.body}
+                    </span>
 
-                  {/* Delivery / Read checkmarks for sender */}
-                  {isMe && (
-                    <span title={isSeen ? "Seen by recipient" : "Delivered"}>
-                      {isSeen ? (
-                        <CheckCheck className="size-3.5 text-emerald-300 inline" />
-                      ) : (
-                        <Check className="size-3.5 opacity-70 inline" />
+                    <span
+                      className={cn(
+                        "ml-auto inline-flex items-center gap-1 text-[10px] font-medium tabular-nums select-none self-end shrink-0 pt-0.5",
+                        isMe ? "text-primary-foreground/75" : "text-muted-foreground/80",
+                      )}
+                    >
+                      <span>
+                        {new Date(m.created_at).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+
+                      {/* Delivery / Read checkmarks for sender */}
+                      {isMe && (
+                        <span
+                          title={isSeen ? "Seen by recipient" : "Delivered"}
+                          className="inline-flex"
+                        >
+                          {isSeen ? (
+                            <CheckCheck className="size-3.5 text-emerald-300" />
+                          ) : (
+                            <Check className="size-3.5 opacity-70" />
+                          )}
+                        </span>
                       )}
                     </span>
-                  )}
+                  </div>
                 </div>
               </div>
             );
@@ -918,7 +950,7 @@ function Thread({
 
         {/* Typing indicator */}
         {isPeerTyping && (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground italic px-3 py-1.5 rounded-full bg-muted/60 w-fit animate-in fade-in">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-3 py-1.5 rounded-2xl bg-card border border-border/60 shadow-xs w-fit animate-in fade-in">
             <span className="size-1.5 rounded-full bg-emerald-500 animate-bounce [animation-delay:-0.3s]" />
             <span className="size-1.5 rounded-full bg-emerald-500 animate-bounce [animation-delay:-0.15s]" />
             <span className="size-1.5 rounded-full bg-emerald-500 animate-bounce" />
