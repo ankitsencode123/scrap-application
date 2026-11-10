@@ -100,6 +100,7 @@ const POPUP_OPTS: L.PopupOptions = {
 declare global {
   interface Window {
     __scrappe_open_chat?: (withId: string, listingId?: string) => void;
+    __scrappe_open_listing?: (listingId: string) => void;
   }
 }
 
@@ -123,8 +124,13 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
         },
       });
     };
+    window.__scrappe_open_listing = (listingId: string) => {
+      if (!listingId) return;
+      navigate({ to: "/listings/$id", params: { id: listingId } });
+    };
     return () => {
       delete window.__scrappe_open_chat;
+      delete window.__scrappe_open_listing;
     };
   }, [navigate]);
 
@@ -151,7 +157,15 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
     return DEFAULT_CENTER;
   }, [initialCenter, user?.latitude, user?.longitude]);
 
-  const [userPos, setUserPos] = useState<LatLng>(initialCoord);
+  const [userPos, setUserPosRaw] = useState<LatLng>(initialCoord);
+  // Ignore GPS jitter (< 8 m) so the heartbeat doesn't re-render / re-centre the map every few seconds.
+  const setUserPos = useCallback((next: LatLng) => {
+    setUserPosRaw((prev) => (haversine(prev, next) * 1000 < 8 ? prev : next));
+  }, []);
+  // Remembers which view we've already auto-centred / fitted, so we only do it once per context
+  // instead of yanking the map back every time the GPS ticks.
+  const centeredKeyRef = useRef<string | null>(null);
+  const fittedKeyRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [tileKey, setTileKey] = useState<TileKey>("normal");
   const [overlays, setOverlays] = useState<Record<Overlay, boolean>>({
@@ -448,7 +462,6 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
     const m = L.map(mapEl.current, {
       zoomControl: false,
       attributionControl: true,
-      tap: false,
       touchZoom: true,
       dragging: true,
       bounceAtZoomLimits: false,
@@ -599,6 +612,15 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
     });
   }, [heatmapData]);
 
+  // Content key: only rebuild markers when the data actually changes (refetches return new arrays).
+  const nearbyKey = useMemo(
+    () =>
+      role === "seller"
+        ? nearbyCollectors.map((c) => `${c.id}:${c.lat.toFixed(4)},${c.lng.toFixed(4)}`).join("|")
+        : (mapListingsData?.items ?? []).map((i) => `${i.id}:${i.status}`).join("|"),
+    [role, nearbyCollectors, mapListingsData?.items],
+  );
+
   // Render nearby online collectors or requests
   useEffect(() => {
     const ng = overlayGroups.current?.nearby;
@@ -630,13 +652,13 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
           icon: divIcon(`<div class="chip-marker text-xs">${meta.emoji}</div>`, 30),
         })
           .bindPopup(
-            `<b>${item.title}</b><br/>${meta.emoji} ${item.category_label} · ${item.weight_kg} kg<br/>Expected: ₹${item.expected_price.toLocaleString("en-IN")}<br/><small>${item.distance_km ? `${item.distance_km} km away` : ""}</small>`,
+            `<b>${item.title}</b><br/>${meta.emoji} ${item.category_label} · ${item.weight_kg} kg<br/>Expected: ₹${item.expected_price.toLocaleString("en-IN")}<br/><small>${item.distance_km ? `${item.distance_km} km away` : ""}</small><div style="margin-top:8px;"><button type="button" onclick="window.__scrappe_open_listing && window.__scrappe_open_listing('${item.id}')" style="display:inline-block;padding:6px 12px;background:#2f5a43;color:#ffffff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">View &amp; Bid →</button></div>`,
             POPUP_OPTS,
           )
           .addTo(ng);
       });
     }
-  }, [role, nearbyCollectors, mapListingsData?.items, activeListing?.id, myListings]);
+  }, [role, nearbyKey, activeListing?.id, myListings[0]?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --------------------------------------------------------------------------
   // 8. DYNAMIC ROUTE GENERATION & REAL PICKUPS
@@ -646,6 +668,13 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
     const sl = stopsLayer.current;
     if (!m || !sl) return;
     sl.clearLayers();
+
+    // Only auto-centre once per context; afterwards the user is free to pan/zoom.
+    const centerOnce = (key: string, pos: LatLng, zoom: number) => {
+      if (centeredKeyRef.current === key) return;
+      centeredKeyRef.current = key;
+      m.setView(pos, zoom);
+    };
 
     let waypoints: LatLng[] = [];
 
@@ -703,9 +732,9 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
             )
             .addTo(sl);
 
-          m.setView(sellerPickupPos, 15);
+          centerOnce(`seller-listing-${activeListing.id}`, sellerPickupPos, 15);
         } else {
-          m.setView(userPos, 14);
+          centerOnce("seller-none", userPos, 14);
         }
       }
     } else {
@@ -732,7 +761,7 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
         }
       } else {
         waypoints = [];
-        m.setView(userPos, 14);
+        centerOnce("collector-none", userPos, 14);
       }
     }
 
@@ -905,10 +934,15 @@ export default function MapView({ onSwitchToListings, initialCenter }: MapViewPr
       vehicle.current.setPopupContent(vehiclePopupHtml);
     }
 
-    m.fitBounds(L.latLngBounds(path.length ? path : [startPos]), {
-      paddingTopLeft: [60, 60],
-      paddingBottomRight: [window.innerWidth >= 1024 ? 400 : 40, 100],
-    });
+    // Fit the route once per set of stops / selected route, not on every GPS tick.
+    const fitKey = `${role}|${activeListing?.id ?? ""}|${collectorStops.map((s) => s.id).join(",")}|${activeRoute}`;
+    if (fittedKeyRef.current !== fitKey) {
+      fittedKeyRef.current = fitKey;
+      m.fitBounds(L.latLngBounds(path.length ? path : [startPos]), {
+        paddingTopLeft: [60, 60],
+        paddingBottomRight: [window.innerWidth >= 1024 ? 400 : 40, 100],
+      });
+    }
 
     return () => clearInterval(t);
   }, [

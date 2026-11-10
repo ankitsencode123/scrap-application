@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowLeft,
@@ -248,7 +248,9 @@ function ChatsPage() {
       }
       if (routeListing && user?.id) {
         const peer =
-          routeListing.seller_id === user.id ? routeListing.collector?.id : routeListing.seller_id;
+          routeListing.seller?.id === user.id
+            ? routeListing.collector?.id
+            : routeListing.seller?.id;
         if (peer) {
           navigate({
             to: "/chats",
@@ -267,11 +269,11 @@ function ChatsPage() {
           search: { listing: match.listing_id, with: search.with },
           replace: true,
         });
-      } else if (myListings.length > 0) {
+      } else if (myListings[0]?.id) {
         // Fallback to seller's active or first listing
         navigate({
           to: "/chats",
-          search: { listing: myListings[0].id, with: search.with },
+          search: { listing: myListings[0]!.id, with: search.with },
           replace: true,
         });
       }
@@ -727,7 +729,7 @@ function Thread({
             <ArrowLeft className="size-5" />
           </Button>
           <UserAvatar
-            src={peerAvatar}
+            src={peerAvatar ?? null}
             name={peerName}
             className="size-10 shrink-0 ring-1 ring-border shadow-sm"
             previewable={true}
